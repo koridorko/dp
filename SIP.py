@@ -1,91 +1,164 @@
-
-
 from pprint import pprint
+from enum import Enum
+
+
+class SIPMessageType(Enum):
+    INVITE = "INVITE"
+    ACK = "ACK"
+    BYE = "BYE"
+    REGISTER = "REGISTER"
+    OK = "200 OK"
+
+
+class SIPException(Exception):
+    """Base class for SIP exceptions"""
+    pass
+
 
 class SIPMessage():
     def __init__(self, message: str):
-        self.message = message
-        self.headers = {}
-        self.body = ""
-        self.first_line = ''
-        self.msg_type = self.get_message_type_first_line()
-        self.parse()
+        """Class for respresenting sip message"""
+        self.message_string = message
+        self.message_type: SIPMessageType | None = None
+        self.sip_version: float | None = None
+        self.starting_line: str | None = self.get_starting_line()
 
-
-    def parse(self):
-        message = self.message.split("\n")
-        splited_message = self.message.split("\n")
-        splited_message = [line.strip() for line in splited_message]
-
-        if "" in splited_message:
-            header_part = splited_message[1:splited_message.index('')]
-            body_part = splited_message[splited_message.index('')+1:]
+        # setting the data from starting line
+        if self.starting_line:
+            self.get_data_from_starting_line(self.starting_line)
         else:
-            header_part = splited_message
-            body_part = []
+            raise SIPException("Invalid SIP message: Missing starting line")
 
-        self.headers = {line.split(": ")[0].strip(): line.split(": ")[1].strip() for line in header_part if ": " in line}
-        self.body = {line.split("=")[0].strip(): line.split("=")[1].strip() for line in body_part if "=" in line}
+        headers_str, body_str = self.split_headers_and_body()
 
-    def get_message_type_first_line(self):
-        first_line = self.message.split("\n")[0]
-        result = first_line.split(" ")[0]
-        self.first_line = self.message.split("\n")[0].strip().replace(f"{result} ", "") 
-        return result
+        self.headers: dict[str, str] = self.parse_headers(headers_str)
+        # body is not mandatory in all sip messages
+        # we will keep both sdp as string and parsed body as dict
+        self.body_str = body_str
+        self.body: str | None = self.parse_body(body_str)
 
 
-    def __str__(self):
-        res = ''
-        res += f"Message type: {self.msg_type}\n"
-        for key, value in self.headers.items():
-            res += f"HEADER= {key}: {value}\n"
-        res += "--------------------------------------------------------------\n"
+    def get_starting_line(self) -> str | None:
+        """Extract starting line from sip message"""
+        lines = self.message_string.split("\n")
+        # starting line is the first line of the message
+        if not lines:
+            # when not complete message is obtained (should never happen)
+            raise SIPException("Empty SIP message")        
+        return lines[0].strip()
 
-        for key, value in self.body.items():
-            res += f"BODY: {key}: {value}\n"
-        return res
+    def get_data_from_starting_line(self, starting_line: str) -> None:
+        """Extract method and sip version from starting line"""
+        # method will be first word in starting line
+        method = starting_line.split(" ")[0].strip()
+        # the case with 200 OK needs to be covered separately
+        if method == "200":
+            method = "200 OK"
+        ########################################################
+        # ^ ugly hack to cover 200 OK case ^ # (change when time will allow)
+        ########################################################
+        if method in SIPMessageType.__members__:
+            self.message_type = SIPMessageType[method]
+        else:
+            raise SIPException(f"Unknown SIP method: {method}")
+
+        # sip version will be last word in starting line
+        sip_version = starting_line.split(" ")[-1].strip()
+        if sip_version.startswith("SIP/"):
+            # we are keeping only version number
+            version_float = float(sip_version.split("/")[1])
+            self.sip_version = version_float
+        else:
+            raise SIPException(f"Unknown SIP version: {sip_version}")
     
+    def split_headers_and_body(self) -> tuple[str, str | None]:
+        """Split headers and body from sip message"""
+        # headers and body are separated by a blank line
+        parts = self.message_string.split("\n\n", 1)
+        headers = parts[0]
+        body = parts[1] if len(parts) > 1 else None
+        return headers, body
+
+    def parse_headers(self, headers: str) -> dict[str, str]:
+        """Parse headers from sip message"""
+        headers_dict = {}
+        lines = headers.split("\n")[1:]  # skip starting line
+        for line in lines:
+            if ": " in line:
+                key, value = line.split(": ", 1)
+                headers_dict[key.strip()] = value.strip()
+        return headers_dict
+
+    def parse_body(self, body: str | None) -> dict[str, str] | None:
+        """Parse body from sip message"""
+        # this is the case when message is headers only, e.g., BYE message
+        if not body:
+            return None
+        # mostly for parsing out SDP body which is in format of key=value
+        body_dict = {key: values for key, values in
+                     (line.split("=", 1) for line in body.split("\n") if "=" in line)}
+        return body_dict
+    
+    def __str__(self) -> str:
+        return f"""SIP Message:
+Type: {self.message_type}
+SIP Version: {self.sip_version}
+Starting Line: {self.starting_line}
+Headers: {self.headers}
+Body: {self.body}"""
 
 
-inv_msg = """INVITE sip:john.doe@example.com SIP/2.0
-Via: SIP/2.0/UDP 192.0.2.1:5060;branch=z9hG4bK776asdhds
+class SIPMessageCreator():
+    """Class for creating SIP messages from given parameters"""
+    def __init__(self) -> None:
+        pass
+
+    def create_invite(self, from_uri: str, to_uri: str, call_id: str, cseq: int, sdp: str) -> SIPMessage:
+        """Create SIP INVITE message"""
+        message = f"""INVITE {to_uri} SIP/2.0
+Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
 Max-Forwards: 70
-To: <sip:john.doe@example.com>
-From: "Jane Doe" <sip:jane.doe@example.com>;tag=1928301774
-Call-ID: a84b4c76e66710
-CSeq: 314159 INVITE
-Contact: <sip:jane.doe@192.0.2.1>
+From: {from_uri}
+To: {to_uri}
+Call-ID: {call_id}
+CSeq: {cseq} INVITE
 Content-Type: application/sdp
-Content-Length: 151
-
-v=0
-o=jane.doe 2890844526 2890842807 IN IP4 192.0.2.1
-s=-
-c=IN IP4 192.0.2.1
-t=0 0
-m=audio 49170 RTP/AVP 0
-a=rtpmap:0 PCMU/8000"""
-
-
-sip_inv = SIPMessage(inv_msg)
-
-
-print(sip_inv)
-pprint(sip_inv.__dict__)
-
-
-
-bye_msg = """BYE sip:jane.doe@192.0.2.1 SIP/2.0
-Via: SIP/2.0/UDP 192.0.2.2:5060;branch=z9hG4bK776asdhds
+Content-Length: {len(sdp)}\r\n\r\n{sdp}"""
+        return SIPMessage(message)
+    
+    def create_ack(self, from_uri: str, to_uri: str, call_id: str, cseq: int) -> SIPMessage:
+        """Create SIP ACK message"""
+        message = f"""ACK {to_uri} SIP/2.0
+Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
 Max-Forwards: 70
-To: "Jane Doe" <sip:jane.doe@example.com>;tag=1928301774
-From: "John Doe" <sip:john.doe@example.com>;tag=8371789120
-Call-ID: a84b4c76e66710
-CSeq: 231 BYE
-Contact: <sip:john.doe@192.0.2.2>
-Content-Length: 0"""
-
-
-sip_bye = SIPMessage(bye_msg)
-print(sip_bye)
-pprint(sip_bye.__dict__)
+From: {from_uri}
+To: {to_uri}
+Call-ID: {call_id}
+CSeq: {cseq} ACK
+Content-Length: 0\r\n\r\n"""
+        return SIPMessage(message)
+    
+    def create_bye(self, from_uri: str, to_uri: str, call_id: str, cseq: int) -> SIPMessage:
+        """Create SIP BYE message"""
+        message = f"""BYE {to_uri} SIP/2.0
+Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
+Max-Forwards: 70
+From: {from_uri}
+To: {to_uri}
+Call-ID: {call_id}
+CSeq: {cseq} BYE
+Content-Length: 0\r\n\r\n"""
+        return SIPMessage(message)
+    
+    def create_ok(self, from_uri: str, to_uri: str, call_id: str, cseq: int, sdp: str) -> SIPMessage:
+        """Create SIP 200 OK message"""
+        message = f"""SIP/2.0 200 OK
+Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
+Max-Forwards: 70
+From: {from_uri}
+To: {to_uri}
+Call-ID: {call_id}
+CSeq: {cseq} INVITE
+Content-Type: application/sdp
+Content-Length: {len(sdp)}\r\n\r\n{sdp}"""
+        return SIPMessage(message)
