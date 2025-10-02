@@ -16,7 +16,6 @@ class MatrixMessage():
         self.message_type: MatrixEventType | None = None
 
 
-
 class MatrixPayloadCreator():
     @staticmethod
     def create_invite_payload(sdp: str, call_id: str, version: int, lifetime: int = 60000) -> dict:

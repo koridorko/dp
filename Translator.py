@@ -2,8 +2,8 @@
 
 
 from enum import Enum
-from SIP import SIPMessage, SIPMessageType, SIPMessageCreator
-from Matrix import MatrixMessage, MatrixEventType
+from SIP import SIPMessage, SIPMessageType, SIPMessageCreator, SIPException
+from Matrix import MatrixMessage, MatrixEventType, MatrixPayloadCreator
 
 class TranslatorException(Exception):
     """Base class for Translator exceptions"""
@@ -12,6 +12,7 @@ class TranslatorException(Exception):
 class Translator():
     def __init__(self) -> None:
         self.sip_creator = SIPMessageCreator()
+        self.matrix_creator = MatrixPayloadCreator
 
     # we have those message that we need to translate 
     
@@ -29,51 +30,46 @@ class Translator():
             match message.message_type:
                 case SIPMessageType.INVITE:
                     # translate to m.call.invite
-                    json_data = {
-                        "type": MatrixEventType.INVITE.value,
-                        "content": {
-                            "sdp": message.body_str,
-                            "version": 0,
-                            "call_id": message.headers.get("Call-ID", ""),
-                            "from": message.headers.get("From", ""),
-                            "to": message.headers.get("To", ""),
-                        }
-                    }
-                    return MatrixMessage(json_data)
-                
+                    # with usage of the matrix_creator (message)
+                    sdp = message.body_str
+                    call_id = message.headers.get('Call-ID', None)
+                    if not call_id:
+                        raise SIPException("Sip message was missing Call-ID in its headers. Can not translate!")
+
+                    version = 0
+                    payload = self.matrix_creator.create_invite_payload(sdp, call_id, version)
+                    return payload
+
                 case SIPMessageType.ACK:
-                    # translate to m.call.select_answer
-                    json_data = {
-                        "type": MatrixEventType.SELECT_ANSWER.value,
-                        "content": {
-                            "call_id": message.headers.get("Call-ID", ""),
-                        }
-                    }
-                    return MatrixMessage(json_data)
+                    # translatest to matrix select_answer event
+                    call_id = message.headers.get('Call-ID' None)
+                    if not call_id:
+                        raise SIPException("Sip message was missing Call-ID in its headers. Can not translate!")
                 
+                    version = 0
+                    sdp = message.body_str
+                    payload = self.matrix_creator.create_select_answer_payload(call_id, version, sdp) 
+                    return payload
+
                 case SIPMessageType.BYE:
                     # translate to m.call.hangup
-                    json_data = {
-                        "type": MatrixEventType.HANGUP.value,
-                        "content": {
-                            "call_id": message.headers.get("Call-ID", ""),
-                        }
-                    }
-                    return MatrixMessage(json_data)
-                
+                    call_id = message.headers.get('Call-ID' None)
+                    if not call_id:
+                        raise SIPException("Sip message was missing Call-ID in its headers. Can not translate!")
+                    version = 0
+                    payload = self.matrix_creator.create_hangup_payload(call_id, version)
+                    return payload
+                      
                 case SIPMessageType.OK:
                     # translate to m.call.answer
-                    json_data = {
-                        "type": MatrixEventType.ANSWER.value,
-                        "content": {
-                            "sdp": message.body_str,
-                            "version": 0,
-                            "call_id": message.headers.get("Call-ID", ""),
-                            "from": message.headers.get("From", ""),
-                            "to": message.headers.get("To", ""),
-                        }
-                    }
-                    return MatrixMessage(json_data)
+                    call_id = message.headers.get('Call-ID' None)
+                    if not call_id:
+                        raise SIPException("Sip message was missing Call-ID in its headers. Can not translate!")
+                    version = 0
+                    sdp = message.body_str
+                    payload = self.matrix_creator.create_answer_payload(call_id, version, sdp)
+                    return payload
+
                 case _:
                     raise TranslatorException(f"Cannot translate SIP message type: {message.message_type}")
 

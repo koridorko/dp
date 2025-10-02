@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "dp"
+version = "0.1.0"
+description = ""
+authors = ["stevikg <stevikg@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+matrix-nio = "^0.25.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
