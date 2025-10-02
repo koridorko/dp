@@ -1,4 +1,3 @@
-from pprint import pprint
 from enum import Enum
 
 
@@ -12,10 +11,11 @@ class SIPMessageType(Enum):
 
 class SIPException(Exception):
     """Base class for SIP exceptions"""
+
     pass
 
 
-class SIPMessage():
+class SIPMessage:
     def __init__(self, message: str):
         """Class for respresenting sip message"""
         self.message_string = message
@@ -34,9 +34,8 @@ class SIPMessage():
         self.headers: dict[str, str] = self.parse_headers(headers_str)
         # body is not mandatory in all sip messages
         # we will keep both sdp as string and parsed body as dict
-        self.body_str = body_str
-        self.body: str | None = self.parse_body(body_str)
-
+        self.body_str: str | None = body_str
+        self.body: dict[str, str] | None = self.parse_body(body_str)
 
     def get_starting_line(self) -> str | None:
         """Extract starting line from sip message"""
@@ -44,7 +43,7 @@ class SIPMessage():
         # starting line is the first line of the message
         if not lines:
             # when not complete message is obtained (should never happen)
-            raise SIPException("Empty SIP message")        
+            raise SIPException("Empty SIP message")
         return lines[0].strip()
 
     def get_data_from_starting_line(self, starting_line: str) -> None:
@@ -70,7 +69,7 @@ class SIPMessage():
             self.sip_version = version_float
         else:
             raise SIPException(f"Unknown SIP version: {sip_version}")
-    
+
     def split_headers_and_body(self) -> tuple[str, str | None]:
         """Split headers and body from sip message"""
         # headers and body are separated by a blank line
@@ -95,10 +94,14 @@ class SIPMessage():
         if not body:
             return None
         # mostly for parsing out SDP body which is in format of key=value
-        body_dict = {key: values for key, values in
-                     (line.split("=", 1) for line in body.split("\n") if "=" in line)}
+        body_dict = {
+            key: values
+            for key, values in (
+                line.split("=", 1) for line in body.split("\n") if "=" in line
+            )
+        }
         return body_dict
-    
+
     def __str__(self) -> str:
         return f"""SIP Message:
 Type: {self.message_type}
@@ -108,12 +111,15 @@ Headers: {self.headers}
 Body: {self.body}"""
 
 
-class SIPMessageCreator():
+class SIPMessageCreator:
     """Class for creating SIP messages from given parameters"""
+
     def __init__(self) -> None:
         pass
 
-    def create_invite(self, from_uri: str, to_uri: str, call_id: str, cseq: int, sdp: str) -> SIPMessage:
+    def create_invite(
+        self, from_uri: str, to_uri: str, call_id: str, cseq: int, sdp: str
+    ) -> SIPMessage:
         """Create SIP INVITE message"""
         message = f"""INVITE {to_uri} SIP/2.0
 Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
@@ -125,8 +131,10 @@ CSeq: {cseq} INVITE
 Content-Type: application/sdp
 Content-Length: {len(sdp)}\r\n\r\n{sdp}"""
         return SIPMessage(message)
-    
-    def create_ack(self, from_uri: str, to_uri: str, call_id: str, cseq: int) -> SIPMessage:
+
+    def create_ack(
+        self, from_uri: str, to_uri: str, call_id: str, cseq: int
+    ) -> SIPMessage:
         """Create SIP ACK message"""
         message = f"""ACK {to_uri} SIP/2.0
 Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
@@ -137,8 +145,10 @@ Call-ID: {call_id}
 CSeq: {cseq} ACK
 Content-Length: 0\r\n\r\n"""
         return SIPMessage(message)
-    
-    def create_bye(self, from_uri: str, to_uri: str, call_id: str, cseq: int) -> SIPMessage:
+
+    def create_bye(
+        self, from_uri: str, to_uri: str, call_id: str, cseq: int
+    ) -> SIPMessage:
         """Create SIP BYE message"""
         message = f"""BYE {to_uri} SIP/2.0
 Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
@@ -149,8 +159,10 @@ Call-ID: {call_id}
 CSeq: {cseq} BYE
 Content-Length: 0\r\n\r\n"""
         return SIPMessage(message)
-    
-    def create_ok(self, from_uri: str, to_uri: str, call_id: str, cseq: int, sdp: str) -> SIPMessage:
+
+    def create_ok(
+        self, from_uri: str, to_uri: str, call_id: str, cseq: int, sdp: str
+    ) -> SIPMessage:
         """Create SIP 200 OK message"""
         message = f"""SIP/2.0 200 OK
 Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
@@ -162,3 +174,4 @@ CSeq: {cseq} INVITE
 Content-Type: application/sdp
 Content-Length: {len(sdp)}\r\n\r\n{sdp}"""
         return SIPMessage(message)
+
