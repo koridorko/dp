@@ -3,7 +3,7 @@
 import os
 
 
-from nio import AsyncClient
+from nio import AsyncClient, SyncResponse
 
 
 class MatrixBotException(Exception):
@@ -17,11 +17,14 @@ class MatrixBot:
 
     def __init__(self) -> None:
         # initializing bot with env variables
-        self.username = os.environ.get("MATRIX_BOT_USERNAME", None)
-        self.password = os.environ.get("MATRIX_BOT_PASSWORD", None)
-        self.homeserver = os.environ.get("MATRIX_BOT_HOMESERVER", None)
-        self.access_token = os.environ.get("MATRIX_BOT_ACCESS_TOKEN", None)
-        self.user_id = os.environ.get("MATRIX_BOT_USER_ID", None)
+        # HACK:
+        # using empty string to ensure it is not None type and don't have to
+        # duplicate all the checks after __init__ function
+        self.username = os.environ.get("MATRIX_BOT_USERNAME", "")
+        self.password = os.environ.get("MATRIX_BOT_PASSWORD", "")
+        self.homeserver = os.environ.get("MATRIX_BOT_HOMESERVER", "")
+        self.access_token = os.environ.get("MATRIX_BOT_ACCESS_TOKEN", "")
+        self.user_id = os.environ.get("MATRIX_BOT_USER_ID", "")
         self.client: AsyncClient | None = None
 
         if not all(
@@ -42,16 +45,17 @@ class MatrixBot:
         # except Exception as e:
         #     raise MatrixBotException(f"Failed to connect to Matrix server: {e}")
 
-    # async def connect_to_server(self) -> None:
-    #     """method to connect to the matrix server"""
-    #     # self client will be latter used for sending and receiving messages
-    #     self.client = AsyncClient(self.homeserver, self.user_id)
-    #     self.client.access_token = self.access_token
-    #     response = await self.client.sync()
-    #     if not isinstance(response, SyncResponse):
-    #         raise MatrixBotException("Failed to sync with the Matrix server")
-    #
-    #     print("Connected to Matrix server successfully")
+    async def connect_to_server(self) -> None:
+        """method to connect to the matrix server"""
+        # self client will be latter used for sending and receiving messages
+
+        self.client = AsyncClient(self.homeserver, self.user_id)
+        self.client.access_token = self.access_token
+        response = await self.client.sync()
+        if not isinstance(response, SyncResponse):
+            raise MatrixBotException("Failed to sync with the Matrix server")
+
+        print("Connected to Matrix server successfully")
 
 
 def test_bot_initialization():
