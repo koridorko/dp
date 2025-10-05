@@ -1,9 +1,10 @@
 """File with implementation of Matrix Bot Class"""
 
+import asyncio
 import os
 import sys
 
-from nio import AsyncClient, SyncResponse
+from nio import AsyncClient, SyncResponse, LoginResponse
 
 
 class MatrixBotException(Exception):
@@ -25,7 +26,9 @@ class MatrixBot:
         self.homeserver = os.environ.get("MATRIX_BOT_HOMESERVER", "")
         self.access_token = os.environ.get("MATRIX_BOT_ACCESS_TOKEN", "")
         self.user_id = os.environ.get("MATRIX_BOT_USER_ID", "")
-        self.client: AsyncClient | None = None
+        self.client: AsyncClient
+        # will be added later
+        self.device_id: str
 
         if not all(
             [
@@ -43,19 +46,41 @@ class MatrixBot:
     async def connect_to_server(self) -> bool:
         """method to connect to the matrix server"""
         # self client will be latter used for sending and receiving messages
-        self.client = AsyncClient(self.homeserver, self.user_id)
+        self.client = AsyncClient(self.homeserver, self.username)
+        resp = await self.client.login(self.password)
+        if isinstance(resp, LoginResponse):
+            user_id = resp.user_id
+            acces_token = resp.access_token
+            device_id = resp.device_id
+
+            if not device_id or not acces_token or not user_id:
+                raise MatrixBotException(
+                    "The login response did not contain all needed data!"
+                )
+            else:
+                self.device_id = device_id
+                self.user_id = user_id
+                self.access_token = acces_token
+                # we will update client with this data
+                self.client_after_login_update()
+                return True
+        else:
+            print("This is big big error")
+            sys.stdout.flush()
+            raise MatrixBotException
+
+    def client_after_login_update(self) -> None:
         self.client.access_token = self.access_token
-        response = await self.client.sync()
-        if not isinstance(response, SyncResponse):
-            return False
-        print("Connected to Matrix server successfully", file=sys.stderr)
-        return True
+        self.client.user_id = self.user_id
+        self.client.device_id = self.device_id
 
 
-def initialize_bot() -> MatrixBot:
+async def initialize_bot() -> MatrixBot:
     """Test function to check bot initialization"""
     bot = MatrixBot()
-    if not bot.connect_to_server():
+    initialization_succesfull = await bot.connect_to_server()
+    print(initialization_succesfull)
+    if not initialization_succesfull:
         raise MatrixBotException(
             "Could not connect to server specified in MATRIX_BOT_HOMESERVER env variable!"
         )
@@ -73,5 +98,12 @@ def initialize_bot() -> MatrixBot:
 #       a bude to vlastne fungovat tak ze matrix acc -> matrix bot -> SIP server -> Iny sip user
 
 
-if __name__ == "__main__":
-    bot = initialize_bot()
+async def start():
+    global bot
+    bot = await initialize_bot()
+
+    # NOTE: will need to find way to allways do this :)
+    await bot.client.close()
+
+
+asyncio.run(start())
