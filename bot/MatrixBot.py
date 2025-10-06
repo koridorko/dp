@@ -4,7 +4,7 @@ import asyncio
 import os
 import sys
 
-from nio import AsyncClient, SyncResponse, LoginResponse
+from nio import AsyncClient, LoginResponse
 
 
 class MatrixBotException(Exception):
@@ -32,11 +32,12 @@ class MatrixBot:
 
         if not all(
             [
+                # we need just those 3 for initial login
+                # user_id could be created but also obtained from login
+                # device_id is obtained from login same as access_token
                 self.username,
                 self.password,
                 self.homeserver,
-                self.access_token,
-                self.user_id,
             ]
         ):
             raise MatrixBotException(
@@ -70,6 +71,8 @@ class MatrixBot:
             raise MatrixBotException
 
     def client_after_login_update(self) -> None:
+        """This is a method that sets up needed things for sending latter
+        requests to the Matrix server"""
         self.client.access_token = self.access_token
         self.client.user_id = self.user_id
         self.client.device_id = self.device_id
@@ -87,23 +90,14 @@ async def initialize_bot() -> MatrixBot:
     return bot
 
 
-# NOTE: usage bude cca nieco ako:
-#       clovek si zapne (bude to v kontajneroch)
-#       SIP server a Matrix bota
-#       (oba si bude musiet "nakonfigurovat")
-#       teda:
-#           pre bota si bude musiet zohnat credentials a upravit env
-#           toho bota bude vyuzivat tak ze ked bude chciet volat SIP -> Matrix
-#       a tiez bude mat  nakonfigurovany sip server, ktory bude pouzity na volanie Matrix -> SIP
-#       a bude to vlastne fungovat tak ze matrix acc -> matrix bot -> SIP server -> Iny sip user
-
-
 async def start():
     global bot
     bot = await initialize_bot()
 
     # NOTE: will need to find way to allways do this :)
+    #       maybe with finally somewhere sensible :)
     await bot.client.close()
 
 
+# for now just for debugging purposes
 asyncio.run(start())
