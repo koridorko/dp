@@ -1,2 +1,4 @@
 poetry.lock
 *.env
+test_script.py
+*__pycache*

@@ -174,4 +174,3 @@ CSeq: {cseq} INVITE
 Content-Type: application/sdp
 Content-Length: {len(sdp)}\r\n\r\n{sdp}"""
         return SIPMessage(message)
-
