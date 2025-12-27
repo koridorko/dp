@@ -85,6 +85,8 @@ class SIPMessage:
         for line in lines:
             if ": " in line:
                 key, value = line.split(": ", 1)
+                if key == "CSeq":
+                    value = value.split(" ")[0]
                 headers_dict[key.strip()] = value.strip()
         return headers_dict
 
@@ -161,16 +163,25 @@ Content-Length: 0\r\n\r\n"""
         return SIPMessage(message)
 
     def create_ok(
-        self, from_uri: str, to_uri: str, call_id: str, cseq: int, sdp: str
-    ) -> SIPMessage:
+        self,
+        from_uri,
+        to_uri,
+        call_id,
+        cseq,
+        sdp,
+        response_to,
+        via,
+    ) -> str:
         """Create SIP 200 OK message"""
+        sdp = sdp if sdp else ""
+        content_type = "Content-Type: application/sdp" if sdp else ""
         message = f"""SIP/2.0 200 OK
-Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
+Via: {via}
 Max-Forwards: 70
 From: {from_uri}
 To: {to_uri}
 Call-ID: {call_id}
-CSeq: {cseq} INVITE
-Content-Type: application/sdp
+CSeq: {cseq} {response_to}
+{content_type}
 Content-Length: {len(sdp)}\r\n\r\n{sdp}"""
-        return SIPMessage(message)
+        return message

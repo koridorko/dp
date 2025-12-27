@@ -13,7 +13,7 @@ class TranslatorException(Exception):
 class Translator:
     def __init__(self) -> None:
         self.sip_creator = SIPMessageCreator()
-        self.matrix_creator = MatrixPayloadCreator
+        self.matrix_creator = MatrixPayloadCreator()
 
     # we have those message that we need to translate
 
