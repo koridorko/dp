@@ -29,7 +29,7 @@ class SIPBridge:
     def send_response(self, socket: socket.socket, message: str, addr: str) -> None:
         socket.sendto(message.encode(), addr)
 
-    def handle_register(self, sip_message: SIPMessage, sock: socket.socket, addr):
+    def handle_register(self, sip_message: SIPMessage, sock: socket.socket, addr: str):
         obtained_headers = sip_message.headers
         # NOTE: we need to take the tag from From part and add it to the to part in server response
 
@@ -62,7 +62,7 @@ class SIPBridge:
                     message, adress = soc.recvfrom(BUFFER_SIZE)
                     # we have message now in the buffer, we can parse it
                     print(f"Recieved {len(message)} from adress: {adress}.")
-                    # if the message is shorter than 8 bytes it is probably ICMP ping
+                    # if the message is shorter than 8 bytes it is probably keep alive from client
                     if len(message) < 8:
                         print("Obtained keep alive message")
                         continue
