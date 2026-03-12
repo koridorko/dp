@@ -3,3 +3,4 @@ poetry.lock
 test_script.py
 *__pycache*
 plan.txt
+/docs/*

@@ -83,6 +83,7 @@ async def initialize_bot() -> MatrixBot:
     bot = MatrixBot()
     initialization_succesfull = await bot.connect_to_server()
     print(initialization_succesfull)
+    print(bot.__dict__)
     if not initialization_succesfull:
         raise MatrixBotException(
             "Could not connect to server specified in MATRIX_BOT_HOMESERVER env variable!"
@@ -96,6 +97,9 @@ async def start():
 
     # NOTE: will need to find way to allways do this :)
     #       maybe with finally somewhere sensible :)
+    # the bot will run in the listening mode when we will do
+    # Matrix -> SIP call
+    # otherwise we will import methods from that to the sip_server
     await bot.client.close()
 
 
