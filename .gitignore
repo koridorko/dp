@@ -4,3 +4,4 @@ test_script.py
 *__pycache*
 plan.txt
 /docs/*
+config/rtpengine.conf

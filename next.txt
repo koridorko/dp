@@ -1,0 +1,8 @@
+pozri si aj toto, spravili to pomerne komplikovane, moja architektura je jednoduchsia, ale myslim ze sa da zistit zo sources co robime zle https://github.com/pluginsGLPI/xivo 
+
+
+
+
+
+SIP server 127.0.0.1:5060, volať napr. sip:111@127.0.0.1 alebo sip:222@127.0.0.1 podľa register.yaml.
+Premenné: ASTERISK_ARI_URL, ASTERISK_ARI_USER, ASTERISK_ARI_PASSWORD, ASTERISK_STASIS_APP, BRIDGE_RTP_HOST, BRIDGE_RTP_PORT; Matrix bot cez bot/.env (MATRIX_BOT_).

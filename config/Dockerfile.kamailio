@@ -1,0 +1,7 @@
+# Kamailio for SIP–Matrix bridge. Config is mounted at startup.
+FROM docker.io/kamailio/kamailio:5.7-alpine
+USER root
+RUN apk add --no-cache curl
+USER kamailio
+# Config from host: -v .../kamailio_generated.cfg:/etc/kamailio/kamailio.cfg:ro
+CMD ["kamailio", "-f", "/etc/kamailio/kamailio.cfg", "-DD", "-E"]

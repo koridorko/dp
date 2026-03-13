@@ -48,11 +48,12 @@ class BridgeCallSession:
         self.room_id: Optional[str] = None
         self.party_id: Optional[str] = None
         self.matrix_answer_sdp: Optional[str] = None
+        self.matrix_answer_party_id: Optional[str] = None
+        self.to_tag: Optional[str] = None  # RFC 3261: UAS adds To tag in 200 OK; we generate it in the bridge
 
     def to_tagged(self) -> str:
-        """To header with server tag (for SIP responses)."""
-        tag = "tag=server-12345678"
-        return self.to_header + ";" + tag
+        """To header with tag for SIP 200 OK / BYE. We are the UAS; to_tag is always set by the bridge."""
+        return self.to_header + ";tag=" + (self.to_tag or "")
 
 
 class SIPSession:

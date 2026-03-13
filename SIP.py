@@ -21,7 +21,7 @@ class SIPException(Exception):
 
 class SIPMessage:
     def __init__(self, message: str):
-        """Class for respresenting sip message"""
+        """Class for representing a SIP message."""
         self.message_string = message
         self.message_type: SIPMessageType | None = None
         self.sip_version: float | None = None
@@ -59,9 +59,11 @@ class SIPMessage:
         # Response: "SIP/2.0 100 Trying" -> first token is "SIP/2.0"
         # Request:  "INVITE sip:... SIP/2.0" -> first token is method
         if tokens[0] == "SIP/2.0":
-            # Status line: SIP/2.0 status_code reason_phrase
+            # Status line: SIP/2.0 status_code reason_phrase (some clients send "200 Ok" instead of "200 OK")
             if len(tokens) >= 2:
-                method = " ".join(tokens[1:])  # e.g. "100 Trying", "200 OK"
+                method = " ".join(tokens[1:])
+                if len(tokens) >= 3 and tokens[1] == "200" and tokens[2].lower() == "ok":
+                    method = "200 OK"
             else:
                 raise SIPException("Invalid SIP response: missing status code")
             # Version is first token
@@ -81,12 +83,15 @@ class SIPMessage:
             raise SIPException(f"Unknown SIP version: {sip_version_str}")
 
     def split_headers_and_body(self) -> tuple[str, str | None]:
-        """Split headers and body from sip message"""
-        # headers and body are separated by a blank line
-        parts = self.message_string.split("\n\n", 1)
-        headers = parts[0]
-        body = parts[1] if len(parts) > 1 else None
-        return headers, body
+        """Split headers and body from sip message. Blank line can be \\n\\n or \\r\\n\\r\\n (RFC 3261)."""
+        s = self.message_string
+        for sep in ("\r\n\r\n", "\n\n"):
+            if sep in s:
+                i = s.index(sep)
+                headers = s[:i]
+                body = s[i + len(sep) :].strip()
+                return headers, body if body else None
+        return s, None
 
     def parse_headers(self, headers: str) -> dict[str, str]:
         """Parse headers from sip message"""
@@ -164,11 +169,19 @@ Content-Length: 0\r\n\r\n"""
         return SIPMessage(_to_crlf(message))
 
     def create_bye(
-        self, from_uri: str, to_uri: str, call_id: str, cseq: int
+        self,
+        from_uri: str,
+        to_uri: str,
+        call_id: str,
+        cseq: int,
+        via: str | None = None,
+        request_uri: str | None = None,
     ) -> SIPMessage:
-        """Create SIP BYE message"""
-        message = f"""BYE {to_uri} SIP/2.0
-Via: SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds
+        """Create SIP BYE request. via = where UAS sends 200 OK; request_uri = clean URI for BYE line (else to_uri)."""
+        via_line = via or "SIP/2.0/UDP example.com;branch=z9hG4bK776asdhds"
+        req_uri = request_uri if request_uri is not None else to_uri
+        message = f"""BYE {req_uri} SIP/2.0
+Via: {via_line}
 Max-Forwards: 70
 From: {from_uri}
 To: {to_uri}
@@ -186,10 +199,12 @@ Content-Length: 0\r\n\r\n"""
         sdp,
         response_to,
         via,
+        contact: str | None = None,
     ) -> str:
-        """Create SIP 200 OK message"""
+        """Create SIP 200 OK message. For 200 OK to INVITE, pass contact so UAC can send ACK (RFC 3261)."""
         sdp = sdp if sdp else ""
         content_type = "Content-Type: application/sdp" if sdp else ""
+        contact_line = f"Contact: {contact}\r\n" if contact else ""
         message = f"""SIP/2.0 200 OK
 Via: {via}
 Max-Forwards: 70
@@ -197,7 +212,7 @@ From: {from_uri}
 To: {to_uri}
 Call-ID: {call_id}
 CSeq: {cseq} {response_to}
-{content_type}
+{contact_line}{content_type}
 Content-Length: {len(sdp)}\r\n\r\n{sdp}"""
         return _to_crlf(message)
 
@@ -240,5 +255,20 @@ From: {from_uri}
 To: {to_uri}
 Call-ID: {call_id}
 CSeq: {cseq} NOT FOUND
+Content-Length: 0\r\n\r\n"""
+        return _to_crlf(message)
+
+    def create_service_unavailable(
+        self, from_uri: str, to_uri: str, call_id: str, cseq: int, via: str
+    ) -> str:
+        """Create SIP 503 Service Unavailable (e.g. media bridge not ready)."""
+        message = f"""SIP/2.0 503 Service Unavailable
+Via: {via}
+Max-Forwards: 70
+From: {from_uri}
+To: {to_uri}
+Call-ID: {call_id}
+CSeq: {cseq} INVITE
+Retry-After: 60
 Content-Length: 0\r\n\r\n"""
         return _to_crlf(message)

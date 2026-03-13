@@ -1,0 +1,23 @@
+# RTPEngine for SIP bridge – minimal image (Alpine + rtpengine).
+# Config is mounted at startup (config/rtpengine.conf from YAML).
+FROM docker.io/library/alpine:3.19
+# rtpengine is in community repo
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/community" >> /etc/apk/repositories && \
+    apk update && apk add --no-cache rtpengine
+# Wrapper: stderr to logs; if config fails, try running with args (diagnostics)
+RUN printf '%s\n' \
+    '#!/bin/sh' \
+    'echo "[entry] Starting rtpengine..."' \
+    'echo "[entry] Supported codecs (SIP <-> WebRTC transcoding):"' \
+    'rtpengine --codecs 2>/dev/null | head -30 || true' \
+    'if [ ! -r /etc/rtpengine.conf ]; then echo "[entry] ERROR: /etc/rtpengine.conf not readable"; exit 1; fi' \
+    'rtpengine --config-file /etc/rtpengine.conf 2>&1' \
+    'e=$?' \
+    'if [ $e -ne 0 ]; then' \
+    '  echo "[entry] Config failed ($e), trying command-line args..."' \
+    '  rtpengine --interface 127.0.0.1 --listen-ng 0.0.0.0:2223 --port-min 30000 --port-max 30100 --table -1 --foreground 2>&1' \
+    '  e=$?; echo "[entry] rtpengine exited with $e"' \
+    'fi' \
+    'exit $e' \
+    > /entry.sh && chmod +x /entry.sh
+ENTRYPOINT ["/entry.sh"]

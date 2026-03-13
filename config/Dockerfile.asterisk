@@ -1,0 +1,5 @@
+# Asterisk with ARI, PJSIP, Stasis, External Media (16.6+).
+# Config is mounted at run: -v .../config/asterisk:/etc/asterisk:ro
+FROM docker.io/andrius/asterisk:20
+# Config from host at run time
+CMD ["asterisk", "-f", "-vvv"]

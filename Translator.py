@@ -1,4 +1,4 @@
-"""Sorce for Translator class, which will translate between sip and mattrix events"""
+"""Translator class: translates between SIP and Matrix events."""
 
 from Matrix import MatrixEventType, MatrixMessage, MatrixPayloadCreator
 from SIP import SIPException, SIPMessage, SIPMessageCreator, SIPMessageType
@@ -8,6 +8,13 @@ class TranslatorException(Exception):
     """Base class for Translator exceptions"""
 
     pass
+
+
+def _normalize_sdp(sdp: str | None) -> str:
+    """Normalize SDP for Matrix: CRLF/CR to LF only. Prevents clients from showing 'missed' instead of ringing."""
+    if not sdp:
+        return ""
+    return sdp.replace("\r\n", "\n").replace("\r", "\n").strip()
 
 
 class Translator:
@@ -32,7 +39,7 @@ class Translator:
                 case SIPMessageType.INVITE:
                     # translate to m.call.invite
                     # with usage of the matrix_creator (message)
-                    sdp = message.body_str
+                    sdp = _normalize_sdp(message.body_str)
                     call_id = message.headers.get("Call-ID", None)
 
                     if call_id and sdp:
@@ -50,7 +57,7 @@ class Translator:
                     # translatest to matrix select_answer event
                     call_id = message.headers.get("Call-ID", None)
                     version = 0
-                    sdp = message.body_str
+                    sdp = _normalize_sdp(message.body_str)
 
                     if sdp and call_id:
                         payload = self.matrix_creator.create_select_answer_payload(
@@ -78,7 +85,7 @@ class Translator:
                     # translate to m.call.answer
                     call_id = message.headers.get("Call-ID", None)
                     version = 0
-                    sdp = message.body_str
+                    sdp = _normalize_sdp(message.body_str)
 
                     if sdp and call_id:
                         payload = self.matrix_creator.create_answer_payload(

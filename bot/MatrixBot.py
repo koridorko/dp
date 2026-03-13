@@ -66,9 +66,8 @@ class MatrixBot:
                 self.client_after_login_update()
                 return True
         else:
-            print("This is big big error")
-            sys.stdout.flush()
-            raise MatrixBotException
+            msg = getattr(resp, "message", str(resp))
+            raise MatrixBotException(f"Login failed (server returned non-LoginResponse): {msg}")
 
     def client_after_login_update(self) -> None:
         """This is a method that sets up needed things for sending latter
@@ -76,6 +75,85 @@ class MatrixBot:
         self.client.access_token = self.access_token
         self.client.user_id = self.user_id
         self.client.device_id = self.device_id
+
+    async def find_room_with_only_user(self, matrix_user_id: str) -> str | None:
+        """Return a room_id where the only members are this bot and matrix_user_id, or None.
+        Call after a sync so client.rooms is up to date."""
+        rooms = getattr(self.client, "rooms", None) or {}
+        for room_id, room in rooms.items():
+            users = getattr(room, "users", None) or {}
+            if len(users) != 2:
+                continue
+            if self.client.user_id in users and matrix_user_id in users:
+                return room_id
+        return None
+
+    async def create_room_and_invite_user(self, matrix_user_id: str) -> str:
+        """Create a room and invite the user. Returns room_id."""
+        from nio import RoomCreateError, RoomInviteError
+
+        try:
+            create_resp = await self.client.room_create(invite=[matrix_user_id])
+        except TypeError:
+            create_resp = await self.client.room_create()
+        if isinstance(create_resp, RoomCreateError):
+            raise MatrixBotException(f"room_create failed: {create_resp}")
+        room_id = create_resp.room_id
+        try:
+            invite_resp = await self.client.room_invite(room_id, matrix_user_id)
+            if isinstance(invite_resp, RoomInviteError):
+                pass
+        except Exception:
+            pass
+        return room_id
+
+    async def send_call_invite(self, room_id: str, content: dict) -> None:
+        """Send m.call.invite event to a room. content = event content dict."""
+        from nio import RoomSendError
+
+        resp = await self.client.room_send(
+            room_id=room_id,
+            message_type="m.call.invite",
+            content=content,
+        )
+        if isinstance(resp, RoomSendError):
+            raise MatrixBotException(f"room_send m.call.invite failed: {resp}")
+
+    async def send_select_answer(self, room_id: str, content: dict) -> None:
+        """Send m.call.select_answer to a room."""
+        from nio import RoomSendError
+
+        resp = await self.client.room_send(
+            room_id=room_id,
+            message_type="m.call.select_answer",
+            content=content,
+        )
+        if isinstance(resp, RoomSendError):
+            raise MatrixBotException(f"room_send m.call.select_answer failed: {resp}")
+
+    async def send_hangup(self, room_id: str, content: dict) -> None:
+        """Send m.call.hangup to a room."""
+        from nio import RoomSendError
+
+        resp = await self.client.room_send(
+            room_id=room_id,
+            message_type="m.call.hangup",
+            content=content,
+        )
+        if isinstance(resp, RoomSendError):
+            raise MatrixBotException(f"room_send m.call.hangup failed: {resp}")
+
+    async def send_call_candidates(self, room_id: str, content: dict) -> None:
+        """Send m.call.candidates to a room. content must have call_id, version, candidates list."""
+        from nio import RoomSendError
+
+        resp = await self.client.room_send(
+            room_id=room_id,
+            message_type="m.call.candidates",
+            content=content,
+        )
+        if isinstance(resp, RoomSendError):
+            raise MatrixBotException(f"room_send m.call.candidates failed: {resp}")
 
 
 async def initialize_bot() -> MatrixBot:
@@ -103,5 +181,5 @@ async def start():
     await bot.client.close()
 
 
-# for now just for debugging purposes
-asyncio.run(start())
+if __name__ == "__main__":
+    asyncio.run(start())

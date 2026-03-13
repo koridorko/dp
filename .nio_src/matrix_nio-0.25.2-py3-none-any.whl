@@ -1,0 +1,81 @@
+.:  --exclude-dir=1
+./.gitignore:  listed in $Not_Code_Extension{gitignore}
+./.nio_src/matrix_nio-0.25.2-py3-none-any.whl:  binary file
+./.nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/LICENSE.md:  duplicate of .nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/LICENSE.md
+./.nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/METADATA:  language unknown (#3)
+./.nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/RECORD:  language unknown (#3)
+./.nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/WHEEL:  language unknown (#3)
+./.nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/top_level.txt:  duplicate of .nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/top_level.txt
+./.nio_src/wheel_extract/nio/__init__.py:  duplicate of .nio_src/wheel_extract/nio/__init__.py
+./.nio_src/wheel_extract/nio/_compat.py:  duplicate of .nio_src/wheel_extract/nio/_compat.py
+./.nio_src/wheel_extract/nio/api.py:  duplicate of .nio_src/wheel_extract/nio/api.py
+./.nio_src/wheel_extract/nio/client/__init__.py:  duplicate of .nio_src/wheel_extract/nio/client/__init__.py
+./.nio_src/wheel_extract/nio/client/async_client.py:  duplicate of .nio_src/wheel_extract/nio/client/async_client.py
+./.nio_src/wheel_extract/nio/client/base_client.py:  duplicate of .nio_src/wheel_extract/nio/client/base_client.py
+./.nio_src/wheel_extract/nio/client/http_client.py:  duplicate of .nio_src/wheel_extract/nio/client/http_client.py
+./.nio_src/wheel_extract/nio/crypto/__init__.py:  duplicate of .nio_src/wheel_extract/nio/crypto/__init__.py
+./.nio_src/wheel_extract/nio/crypto/async_attachments.py:  duplicate of .nio_src/wheel_extract/nio/crypto/async_attachments.py
+./.nio_src/wheel_extract/nio/crypto/attachments.py:  duplicate of .nio_src/wheel_extract/nio/crypto/attachments.py
+./.nio_src/wheel_extract/nio/crypto/device.py:  duplicate of .nio_src/wheel_extract/nio/crypto/device.py
+./.nio_src/wheel_extract/nio/crypto/key_export.py:  duplicate of .nio_src/wheel_extract/nio/crypto/key_export.py
+./.nio_src/wheel_extract/nio/crypto/key_request.py:  duplicate of .nio_src/wheel_extract/nio/crypto/key_request.py
+./.nio_src/wheel_extract/nio/crypto/log.py:  duplicate of .nio_src/wheel_extract/nio/crypto/log.py
+./.nio_src/wheel_extract/nio/crypto/memorystores.py:  duplicate of .nio_src/wheel_extract/nio/crypto/memorystores.py
+./.nio_src/wheel_extract/nio/crypto/olm_machine.py:  duplicate of .nio_src/wheel_extract/nio/crypto/olm_machine.py
+./.nio_src/wheel_extract/nio/crypto/sas.py:  duplicate of .nio_src/wheel_extract/nio/crypto/sas.py
+./.nio_src/wheel_extract/nio/crypto/sessions.py:  duplicate of .nio_src/wheel_extract/nio/crypto/sessions.py
+./.nio_src/wheel_extract/nio/event_builders/__init__.py:  duplicate of .nio_src/wheel_extract/nio/event_builders/__init__.py
+./.nio_src/wheel_extract/nio/event_builders/direct_messages.py:  duplicate of .nio_src/wheel_extract/nio/event_builders/direct_messages.py
+./.nio_src/wheel_extract/nio/event_builders/event_builder.py:  duplicate of .nio_src/wheel_extract/nio/event_builders/event_builder.py
+./.nio_src/wheel_extract/nio/event_builders/state_events.py:  duplicate of .nio_src/wheel_extract/nio/event_builders/state_events.py
+./.nio_src/wheel_extract/nio/events/__init__.py:  duplicate of .nio_src/wheel_extract/nio/events/__init__.py
+./.nio_src/wheel_extract/nio/events/account_data.py:  duplicate of .nio_src/wheel_extract/nio/events/account_data.py
+./.nio_src/wheel_extract/nio/events/common.py:  duplicate of .nio_src/wheel_extract/nio/events/common.py
+./.nio_src/wheel_extract/nio/events/ephemeral.py:  duplicate of .nio_src/wheel_extract/nio/events/ephemeral.py
+./.nio_src/wheel_extract/nio/events/invite_events.py:  duplicate of .nio_src/wheel_extract/nio/events/invite_events.py
+./.nio_src/wheel_extract/nio/events/misc.py:  duplicate of .nio_src/wheel_extract/nio/events/misc.py
+./.nio_src/wheel_extract/nio/events/presence.py:  duplicate of .nio_src/wheel_extract/nio/events/presence.py
+./.nio_src/wheel_extract/nio/events/room_events.py:  duplicate of .nio_src/wheel_extract/nio/events/room_events.py
+./.nio_src/wheel_extract/nio/events/to_device.py:  duplicate of .nio_src/wheel_extract/nio/events/to_device.py
+./.nio_src/wheel_extract/nio/exceptions.py:  duplicate of .nio_src/wheel_extract/nio/exceptions.py
+./.nio_src/wheel_extract/nio/http.py:  duplicate of .nio_src/wheel_extract/nio/http.py
+./.nio_src/wheel_extract/nio/monitors.py:  duplicate of .nio_src/wheel_extract/nio/monitors.py
+./.nio_src/wheel_extract/nio/responses.py:  duplicate of .nio_src/wheel_extract/nio/responses.py
+./.nio_src/wheel_extract/nio/rooms.py:  duplicate of .nio_src/wheel_extract/nio/rooms.py
+./.nio_src/wheel_extract/nio/schemas.py:  duplicate of .nio_src/wheel_extract/nio/schemas.py
+./.nio_src/wheel_extract/nio/store/__init__.py:  duplicate of .nio_src/wheel_extract/nio/store/__init__.py
+./.nio_src/wheel_extract/nio/store/database.py:  duplicate of .nio_src/wheel_extract/nio/store/database.py
+./.nio_src/wheel_extract/nio/store/file_trustdb.py:  duplicate of .nio_src/wheel_extract/nio/store/file_trustdb.py
+./.nio_src/wheel_extract/nio/store/log.py:  duplicate of .nio_src/wheel_extract/nio/store/log.py
+./.nio_src/wheel_extract/nio/store/models.py:  duplicate of .nio_src/wheel_extract/nio/store/models.py
+./.pytest_cache/.gitignore:  listed in $Not_Code_Extension{gitignore}
+./.pytest_cache/CACHEDIR.TAG:  language unknown (#3)
+./.pytest_cache/v/cache/lastfailed:  language unknown (#3)
+./.pytest_cache/v/cache/nodeids:  language unknown (#3)
+./.pytest_cache/v/cache/stepwise:  language unknown (#3)
+./README.md:  zero sized file
+./__init__.py:  zero sized file
+./__pycache__/Matrix.cpython-313.pyc:  binary file
+./__pycache__/MediaBridge.cpython-313.pyc:  binary file
+./__pycache__/SIP.cpython-312.pyc:  binary file
+./__pycache__/SIP.cpython-313.pyc:  binary file
+./__pycache__/Translator.cpython-313.pyc:  binary file
+./__pycache__/__init__.cpython-313.pyc:  binary file
+./bot/.env:  language unknown (#3)
+./bot/__pycache__/MatrixBot.cpython-313.pyc:  binary file
+./bot/__pycache__/__init__.cpython-313.pyc:  binary file
+./log.log:  language unknown (#3)
+./poetry.lock:  language unknown (#3)
+./sip_bridge/__pycache__/SIPSession.cpython-313.pyc:  binary file
+./sip_bridge/__pycache__/SIP_bridge_server.cpython-312.pyc:  binary file
+./sip_bridge/__pycache__/SIP_bridge_server.cpython-313.pyc:  binary file
+./sip_bridge/__pycache__/__init__.cpython-312.pyc:  binary file
+./sip_bridge/__pycache__/__init__.cpython-313.pyc:  binary file
+./stderr.log:  language unknown (#3)
+./tests/__pycache__/conftest.cpython-313-pytest-8.4.2.pyc:  binary file
+./tests/__pycache__/test_matrix_bot.cpython-313-pytest-8.4.2.pyc:  binary file
+./tests/__pycache__/test_media_bridge.cpython-313-pytest-8.3.4.pyc:  binary file
+./tests/__pycache__/test_media_bridge.cpython-313-pytest-8.4.2.pyc:  binary file
+.nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/METADATA:  language unknown (#3)
+.nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/RECORD:  language unknown (#3)
+.nio_src/wheel_extract/matrix_nio-0.25.2.dist-info/WHEEL:  language unknown (#3)

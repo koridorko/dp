@@ -7,9 +7,21 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
+aiortc = "^1.6.0"
 matrix-nio = "^0.25.2"
 pyyaml = "^6.0.3"
+python-dotenv = "^1.0.0"
+websockets = "^14.0"
+# PCMU (G.711 μ-law): stdlib audioop removed in 3.13; use audioop-lts on 3.13+
+audioop-lts = { version = "^0.2", python = ">=3.13" }
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.24.0"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [build-system]
 requires = ["poetry-core"]
