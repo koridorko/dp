@@ -1,70 +1,8 @@
-"""SIP bridge configuration and constants."""
+"""SIP bridge configuration and constants (Asterisk + Matrix, no Kamailio/RTPEngine)."""
 
 import os
-import socket
-from pathlib import Path
 
 BUFFER_SIZE = 2048
-
-
-def _read_rtpengine_interface() -> str | None:
-    """Read interface= from config/rtpengine.conf so bridge advertises same IP as RTPEngine (Linphone must send RTP there)."""
-    conf_path = os.environ.get("RTPENGINE_CONF", "").strip()
-    if not conf_path:
-        try:
-            repo_root = Path(__file__).resolve().parent.parent
-            conf_path = repo_root / "config" / "rtpengine.conf"
-        except Exception:
-            return None
-    path = Path(conf_path)
-    if not path.is_file():
-        return None
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("interface="):
-                    val = line.split("=", 1)[1].strip()
-                    if val and val != "0.0.0.0":
-                        return val
-    except OSError:
-        pass
-    return None
-
-
-def get_advertised_host_for_media() -> str:
-    """IP where RTPEngine listens so Element/Linphone send media there. Must match RTPEngine's interface= in rtpengine.conf."""
-    env = os.environ.get("MEDIABRIDGE_ADVERTISED_HOST", "").strip()
-    if env:
-        return env
-    iface = _read_rtpengine_interface()
-    if iface:
-        return iface
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        addr = s.getsockname()[0]
-        s.close()
-        if addr and addr != "0.0.0.0":
-            return addr
-    except OSError:
-        pass
-    return "127.0.0.1"
-
-
-def get_non_loopback_host() -> str | None:
-    """Primary non-loopback IP (for c= in SIP SDP; many SIP UACs do not accept 127.0.0.1 in c=)."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        addr = s.getsockname()[0]
-        s.close()
-        if addr and addr not in ("0.0.0.0", "127.0.0.1"):
-            return addr
-    except OSError:
-        pass
-    return None
-
 
 SYNC_POLL_MS = 3000
 ANSWER_TIMEOUT_SEC = 90
