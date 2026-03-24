@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -143,6 +144,31 @@ def answer_channel(base: str, user: str, password: str, channel_id: str) -> bool
     return result is not None
 
 
+def channel_still_exists(base: str, user: str, password: str, channel_id: str) -> bool:
+    """GET /ari/channels/{id}. False if 404 (channel hung up); True on 200 or on transient errors (avoid false hangup)."""
+    import base64
+
+    if not base or not channel_id:
+        return True
+    url = _ari_url(base, f"/channels/{channel_id}")
+    req = urllib.request.Request(url, method="GET")
+    req.add_header(
+        "Authorization",
+        "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode(),
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status == 200
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        logger.warning("ARI GET /channels/%s HTTP %s", channel_id, e.code)
+        return True
+    except Exception as e:
+        logger.warning("ARI GET /channels/%s failed: %s", channel_id, e)
+        return True
+
+
 async def run_ari_websocket(
     base_http: str,
     user: str,
@@ -152,19 +178,28 @@ async def run_ari_websocket(
     our_rtp_port: int,
     on_incoming_call: "Callable[[str, str], None]",
     loop=None,
+    format_codec: str = "ulaw",
+    on_sip_channel_destroyed=None,
 ) -> None:
     """
     Connect to ARI WebSocket (events), handle StasisStart.
     When a channel enters Stasis(matrix-bridge, EXTEN):
-      - Create External Media channel (RTP to our_rtp_host:our_rtp_port, ulaw)
+      - Create External Media channel (RTP to our_rtp_host:our_rtp_port, format_codec)
       - Create bridge, add SIP channel and External Media channel
       - Call on_incoming_call(sip_channel_id, extension) so bridge can send m.call.invite.
     base_http: e.g. http://127.0.0.1:8088
     on_incoming_call: callback(sip_channel_id, extension) - extension is the dialed number (e.g. "111").
+    on_sip_channel_destroyed: optional async callback(channel_id) when a channel is destroyed (SIP hangup).
     """
     loop = loop or asyncio.get_event_loop()
     ws_url = base_http.replace("http://", "ws://").replace("https://", "wss://").rstrip("/")
-    ws_url += f"/ari/events?app={urllib.parse.quote(app_name)}"
+    # subscribeAll: after PJSIP + External Media join a native bridge, they leave Stasis and the
+    # app has no channels — app-only subscription stops delivering ChannelDestroyed. We need
+    # subscribeAll to see SIP hangup; still filter StasisStart by application name.
+    ws_url += (
+        f"/ari/events?app={urllib.parse.quote(app_name)}"
+        f"&subscribeAll=true"
+    )
     import base64
     auth = base64.b64encode(f"{user}:{password}".encode()).decode()
 
@@ -187,7 +222,18 @@ async def run_ari_websocket(
                 async for raw in ws:
                     ev = json.loads(raw)
                     ev_type = ev.get("type")
+                    if ev_type == "ChannelDestroyed":
+                        ch = ev.get("channel") or {}
+                        destroyed_id = ch.get("id")
+                        if destroyed_id and on_sip_channel_destroyed:
+                            try:
+                                await on_sip_channel_destroyed(destroyed_id)
+                            except Exception as e:
+                                logger.exception("on_sip_channel_destroyed failed: %s", e)
+                        continue
                     if ev_type == "StasisStart":
+                        if (ev.get("application") or "") != app_name:
+                            continue
                         channel_id = (ev.get("channel") or {}).get("id")
                         channel_name = (ev.get("channel") or {}).get("name") or ""
                         args = ev.get("args") or []
@@ -213,7 +259,7 @@ async def run_ari_websocket(
                                     app_name,
                                     our_rtp_host,
                                     our_rtp_port,
-                                    "ulaw",
+                                    format_codec,
                                 ),
                             )
                             if not ext_ch:
