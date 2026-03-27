@@ -53,10 +53,15 @@ def parse_via_host_port(via_header: str, default_port: int = 5061) -> tuple[str,
 def parse_invite_rtp_addr(sip_message) -> tuple[str, int] | None:
     """Parse INVITE SDP for first c= and m=audio; return (ip, port) or None."""
     raw = getattr(sip_message, "body_str", None) or ""
-    if not raw:
+    return parse_sdp_rtp_endpoint(raw)
+
+
+def parse_sdp_rtp_endpoint(sdp: str) -> tuple[str, int] | None:
+    """Parse raw SDP: first c= IN IP4 and first m=audio port -> (ip, port) or None."""
+    if not sdp:
         return None
     ip, port = None, None
-    for line in raw.replace("\r", "\n").split("\n"):
+    for line in sdp.replace("\r", "\n").split("\n"):
         line = line.strip()
         if line.startswith("c=") and ip is None:
             parts = line[2:].strip().split()

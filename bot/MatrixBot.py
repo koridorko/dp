@@ -67,7 +67,9 @@ class MatrixBot:
                 return True
         else:
             msg = getattr(resp, "message", str(resp))
-            raise MatrixBotException(f"Login failed (server returned non-LoginResponse): {msg}")
+            raise MatrixBotException(
+                f"Login failed (server returned non-LoginResponse): {msg}"
+            )
 
     def client_after_login_update(self) -> None:
         """This is a method that sets up needed things for sending latter
@@ -172,12 +174,6 @@ async def initialize_bot() -> MatrixBot:
 async def start():
     global bot
     bot = await initialize_bot()
-
-    # NOTE: will need to find way to allways do this :)
-    #       maybe with finally somewhere sensible :)
-    # the bot will run in the listening mode when we will do
-    # Matrix -> SIP call
-    # otherwise we will import methods from that to the sip_server
     await bot.client.close()
 
 

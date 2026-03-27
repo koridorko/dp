@@ -1,17 +1,18 @@
 #! /usr/bin/env python3
 """
-Asterisk + Matrix bridge: 
+Asterisk + Matrix bridge:
 - Asterisk receives SIP (Linphone), sends call to Stasis(matrix-bridge, EXTEN).
 - We create External Media channel (RTP to our port, ulaw), bridge with SIP channel.
 - We send m.call.invite to Matrix user (register.yaml: extension -> matrix_user_id).
 - Media: Asterisk (ulaw) <-> MediaBridge (ulaw<->48k PCM) <-> WebRTC (Opus) <-> Element.
 
-Run: poetry run python -m sip_bridge.asterisk_bridge_server
-Then: ./scripts/run_asterisk.sh
+Run: ./scripts/run_asterisk.sh
+Then: poetry run python -m sip_bridge
 Linphone: sip:111@127.0.0.1 (111 from register.yaml -> Matrix user)
 """
 
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -19,6 +20,7 @@ import yaml
 
 try:
     from dotenv import load_dotenv
+
     _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     load_dotenv(os.path.join(_root, "bot", ".env"))
 except ImportError:
@@ -40,6 +42,7 @@ from .sdp_utils import sdp_summary, inject_ice_candidates_into_sdp
 # MediaBridge: RTP (ulaw from Asterisk) <-> WebRTC (Opus to Element)
 try:
     from MediaBridge import MediaBridge
+
     _MEDIABRIDGE_AVAILABLE = True
 except ImportError:
     MediaBridge = None
@@ -195,7 +198,9 @@ async def handle_incoming_call(
         deadline = time.time() + WAIT_JOIN_ROOM_SEC
         while time.time() < deadline:
             sync_join = await matrix_sync.nio_sync(client)
-            if sync_join and matrix_sync.parse_sync_for_joined_member(sync_join, room_id, matrix_user_id):
+            if sync_join and matrix_sync.parse_sync_for_joined_member(
+                sync_join, room_id, matrix_user_id
+            ):
                 break
             await asyncio.sleep(0.5)
 
@@ -217,7 +222,9 @@ async def handle_incoming_call(
         "invitee": matrix_user_id,
     }
     await bot.send_call_invite(room_id, content)
-    print(f"[Asterisk] Sent m.call.invite room={room_id} ext={extension} -> {matrix_user_id}")
+    print(
+        f"[Asterisk] Sent m.call.invite room={room_id} ext={extension} -> {matrix_user_id}"
+    )
 
     cands = bridge.media_bridge.get_local_ice_candidates()
     if cands:
@@ -236,9 +243,11 @@ async def handle_incoming_call(
     answer_data = None
     while time.time() < deadline:
         sync_resp = await matrix_sync.nio_sync(client)
-        answer_data = matrix_sync.parse_sync_for_answer_with_party_id(
-            sync_resp, room_id, call_id
-        ) if sync_resp else None
+        answer_data = (
+            matrix_sync.parse_sync_for_answer_with_party_id(sync_resp, room_id, call_id)
+            if sync_resp
+            else None
+        )
         if answer_data:
             break
         await asyncio.sleep(0.3)
@@ -335,9 +344,7 @@ class AsteriskBridge:
             call_id, sess = hit
             self.sessions.pop(call_id, None)
 
-        await _notify_matrix_sip_ended(
-            self, call_id, sess["room_id"], sess["party_id"]
-        )
+        await _notify_matrix_sip_ended(self, call_id, sess["room_id"], sess["party_id"])
 
     async def _handle_with_lock(self, sip_channel_id: str, extension: str) -> None:
         if self._call_lock is None:
@@ -347,7 +354,7 @@ class AsteriskBridge:
 
 
 async def main() -> None:
-    # Spúšťaj vždy z koreňa repozitára (kvôli register.yaml, bot/.env)
+    # Always run from repo root (register.yaml, bot/.env).
     _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(_repo_root)
 
@@ -377,7 +384,10 @@ async def main() -> None:
     # Matrix bot
     for var in ("MATRIX_BOT_USERNAME", "MATRIX_BOT_PASSWORD", "MATRIX_BOT_HOMESERVER"):
         if not os.environ.get(var, "").strip():
-            print(f"[Bridge] Chýba premenná {var}. Načítaj bot/.env (source bot/.env) alebo exportuj.", file=sys.stderr)
+            print(
+                f"[Bridge] Missing env var {var}. Load bot/.env (source bot/.env) or export it.",
+                file=sys.stderr,
+            )
             sys.exit(1)
     bot = MatrixBot()
     await bot.connect_to_server()
@@ -397,6 +407,7 @@ async def main() -> None:
     bridge.ari_pass = ari_pass
 
     from .ari_client import run_ari_websocket
+
     ari_task = asyncio.create_task(
         run_ari_websocket(
             ari_base,
@@ -413,17 +424,34 @@ async def main() -> None:
     )
 
     print(f"[Bridge] ARI WebSocket connecting to {ari_base} app={app_name}")
-    await ari_task
+    try:
+        await ari_task
+    finally:
+        ari_task.cancel()
+        try:
+            await ari_task
+        except asyncio.CancelledError:
+            pass
+        if bot and getattr(bot, "client", None):
+            try:
+                await bot.client.close()
+            except Exception:
+                pass
 
 
 def run() -> None:
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n[Bridge] Ukončené.")
+        print("\n[Bridge] Stopped.")
     except Exception as e:
-        print(f"[Bridge] Chyba: {e}", file=sys.stderr)
+        print(f"[Bridge] Error: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

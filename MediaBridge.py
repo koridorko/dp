@@ -1,5 +1,5 @@
 """
-MediaBridge: bidirectional audio relay between SIP (RTP/Opus) and Matrix/Element (WebRTC/Opus).
+MediaBridge: bidirectional audio relay between SIP (RTP/Opus or PCMU) and Matrix/Element (WebRTC/Opus).
 
 Requires Linphone (and our 200 OK SDP) to use Opus 48 kHz. Single sample rate = 48 kHz, no resampling.
 
@@ -22,6 +22,9 @@ Same socket: read in loop (add_reader), write in loop (sendto from task).
 Public API (unchanged for HTTP bridge):
   set_peer_sip_rtp_addr(host, port), get_sip_rtp_bind_addr(), create_offer() -> SDP,
   get_local_ice_candidates(), set_remote_answer(sdp), add_remote_candidate(...), start(), stop().
+
+Matrix→SIP reverse bridge may call sip_bridge.aioice_hangup_patch.install_aioice_stun_hangup_patch()
+once at startup to reduce aioice STUN retry noise after WebRTC teardown (Asterisk bridge does not).
 """
 
 import asyncio
@@ -71,10 +74,20 @@ def rtp_parse(data: bytes) -> tuple[bytes, int, int, int, int] | None:
     return (data[RTP_HEADER_SIZE:], pt, seq, ts, ssrc)
 
 
-def rtp_build(payload: bytes, seq: int, ts: int, ssrc: int = 0x12345678, payload_type: int = RTP_PAYLOAD_TYPE_OPUS) -> bytes:
+def rtp_build(
+    payload: bytes,
+    seq: int,
+    ts: int,
+    ssrc: int = 0x12345678,
+    payload_type: int = RTP_PAYLOAD_TYPE_OPUS,
+) -> bytes:
     header = struct.pack(
         ">BBHII",
-        0x80, payload_type & 0x7F, seq & 0xFFFF, ts & 0xFFFFFFFF, ssrc,
+        0x80,
+        payload_type & 0x7F,
+        seq & 0xFFFF,
+        ts & 0xFFFFFFFF,
+        ssrc,
     )
     return header + payload
 
@@ -91,7 +104,7 @@ def _ensure_rtcp_mux_in_sdp(sdp: str) -> str:
             j = i + 1
             while j < len(lines) and not lines[j].startswith("m="):
                 j += 1
-            section = lines[i : j]
+            section = lines[i:j]
             if not any(l.strip() == "a=rtcp-mux" for l in section):
                 out.append("a=rtcp-mux")
             for k in range(i + 1, j):
@@ -106,6 +119,7 @@ def _ensure_rtcp_mux_in_sdp(sdp: str) -> str:
 def _make_opus_decoder():
     """Create and open one Opus decoder (reuse for all RTP packets)."""
     import av
+
     dec = av.CodecContext.create("libopus", "r")
     dec.open()
     return dec
@@ -114,6 +128,7 @@ def _make_opus_decoder():
 def _opus_decode_payload(decoder, payload: bytes) -> list[bytes]:
     """Decode Opus RTP payload to 16-bit PCM (48 kHz mono). Uses shared decoder. Returns list of raw PCM chunks."""
     import av
+
     if not payload or not decoder:
         return []
     try:
@@ -128,7 +143,9 @@ def _opus_decode_payload(decoder, payload: bytes) -> list[bytes]:
             continue
         if getattr(f, "format", None) and str(f.format) != "s16":
             if resampler is None:
-                resampler = av.AudioResampler(format="s16", layout="mono", rate=SAMPLE_RATE)
+                resampler = av.AudioResampler(
+                    format="s16", layout="mono", rate=SAMPLE_RATE
+                )
             resampled = resampler.resample(f)
             if resampled:
                 for r in resampled:
@@ -141,6 +158,7 @@ def _opus_decode_payload(decoder, payload: bytes) -> list[bytes]:
 def _make_opus_encoder():
     """Create and open one Opus encoder (reuse for all 20 ms frames)."""
     import av
+
     enc = av.CodecContext.create("libopus", "w")
     enc.format = "s16"
     enc.layout = "mono"
@@ -152,6 +170,7 @@ def _make_opus_encoder():
 def _opus_encode_pcm(encoder, pcm: bytes) -> bytes | None:
     """Encode 20 ms PCM (960 samples, 1920 bytes) to Opus. Uses shared encoder. Returns single packet payload or None."""
     import av
+
     if not encoder or len(pcm) < PCM_FRAME_BYTES:
         return None
     frame = av.AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
@@ -171,6 +190,7 @@ def _opus_encode_pcm(encoder, pcm: bytes) -> bytes | None:
 # MediaBridge
 # ---------------------------------------------------------------------------
 
+
 class MediaBridge:
     """
     Relay: SIP RTP (Opus 48 kHz) ↔ WebRTC (Opus 48 kHz). One sample rate, no resampling.
@@ -187,6 +207,8 @@ class MediaBridge:
         self.listen_host = listen_host
         self.advertised_host = advertised_host
         self.sip_codec = (sip_codec or "opus").lower()
+        self._pyvoip_external = False
+        self._pyvoip_tx_queue: queue.Queue | None = None
         self._peer_sip: tuple[str, int] | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -208,6 +230,23 @@ class MediaBridge:
         self._opus_encoder = None
         self._element_pcm_buffer = bytearray()
 
+    def attach_pyvoip_tx_queue(self, q: queue.Queue) -> None:
+        """Matrix→SIP via pyVoIP: PCMU payloads (160 B) for VoIPCall.write_audio (after ulaw→lin8)."""
+        self._pyvoip_external = True
+        self._pyvoip_tx_queue = q
+
+    def detach_pyvoip(self) -> None:
+        self._pyvoip_external = False
+        self._pyvoip_tx_queue = None
+
+    def inject_pyvoip_pcmu(self, ulaw_payload: bytes) -> None:
+        """SIP→Matrix: one RTP PCMU payload (160 B); fed into Element path like RTP decode."""
+        if len(ulaw_payload) != 160 or not self._loop or self._stop.is_set():
+            return
+        chunks = self._ulaw_decode_to_48k(ulaw_payload)
+        if chunks:
+            self._loop.call_soon_threadsafe(self._append_sip_chunks, chunks)
+
     def set_peer_sip_rtp_addr(self, host: str, port: int) -> None:
         self._peer_sip = (host, port)
         print(f"[MediaBridge] Element→SIP RTP will be sent to {host}:{port}")
@@ -227,8 +266,13 @@ class MediaBridge:
         try:
             self._opus_encoder = _make_opus_encoder()
         except Exception as e:
-            print(f"[MediaBridge] Opus encoder init failed at start (Element→Linphone send will be silent): {e}", flush=True)
-        self._decoder_thread = threading.Thread(target=self._decoder_worker, daemon=True)
+            print(
+                f"[MediaBridge] Opus encoder init failed at start (Element→Linphone send will be silent): {e}",
+                flush=True,
+            )
+        self._decoder_thread = threading.Thread(
+            target=self._decoder_worker, daemon=True
+        )
         self._decoder_thread.start()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
@@ -259,6 +303,9 @@ class MediaBridge:
             except Exception:
                 return
         while not self._stop.is_set():
+            if self._pyvoip_external:
+                time.sleep(0.3)
+                continue
             try:
                 payload, ssrc = self._raw_rtp_queue.get(timeout=0.3)
             except queue.Empty:
@@ -272,13 +319,15 @@ class MediaBridge:
 
     def _on_rtp_readable(self) -> None:
         """Socket readable (loop): parse RTP, put payload in queue for decoder thread."""
+        if self._pyvoip_external:
+            return
         try:
             data, from_addr = self._sock.recvfrom(2048)
         except (BlockingIOError, OSError):
             return
         if not getattr(self, "_logged_first_rtp_from_sip", False):
             self._logged_first_rtp_from_sip = True
-            print("[MediaBridge] First RTP from Linphone.", flush=True)
+            print("[MediaBridge] First RTP from SIP peer.", flush=True)
         parsed = rtp_parse(data)
         if not parsed:
             return
@@ -286,7 +335,10 @@ class MediaBridge:
         if self.sip_codec == "ulaw":
             if not self._peer_sip:
                 self._peer_sip = from_addr
-                print(f"[MediaBridge] Asterisk RTP peer set from first packet: {from_addr}", flush=True)
+                print(
+                    f"[MediaBridge] Asterisk RTP peer set from first packet: {from_addr}",
+                    flush=True,
+                )
             if not payload or pt != RTP_PAYLOAD_TYPE_PCMU:
                 return
         else:
@@ -303,6 +355,7 @@ class MediaBridge:
     def _ulaw_decode_to_48k(self, payload: bytes) -> list[bytes]:
         """Decode ulaw payload to 48 kHz PCM (960 samples per 20 ms). Uses 8k->48k resample."""
         import av
+
         try:
             import audioop
         except ImportError:
@@ -326,6 +379,7 @@ class MediaBridge:
             except Exception:
                 pass
         import struct
+
         frames_8k = []
         for i in range(0, n_8k, 160):
             chunk = linear_8k[i * 2 : (i + 160) * 2]
@@ -351,6 +405,7 @@ class MediaBridge:
             except ImportError:
                 return None
         import av
+
         if len(pcm_48k) < PCM_FRAME_BYTES:
             return None
         resampler = getattr(self, "_ulaw_resampler_48to8", None)
@@ -360,7 +415,9 @@ class MediaBridge:
                 self._ulaw_resampler_48to8 = resampler
             except Exception:
                 pass
-        frame_48k = av.AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
+        frame_48k = av.AudioFrame(
+            format="s16", layout="mono", samples=SAMPLES_PER_FRAME
+        )
         frame_48k.sample_rate = SAMPLE_RATE
         frame_48k.time_base = fractions.Fraction(1, SAMPLE_RATE)
         frame_48k.planes[0].update(pcm_48k[:PCM_FRAME_BYTES])
@@ -375,6 +432,7 @@ class MediaBridge:
     async def _sip_to_webrtc_playout(self) -> None:
         """Every 20 ms: take one frame from jitter buffer (or silence), put in queue for track.recv()."""
         import av
+
         silent = b"\x00" * PCM_FRAME_BYTES
         started = getattr(self, "_sip_playout_started", False)
         while not self._stop.is_set():
@@ -387,7 +445,9 @@ class MediaBridge:
                 else:
                     pcm = silent
                 if self._sip_to_webrtc_queue:
-                    f = av.AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
+                    f = av.AudioFrame(
+                        format="s16", layout="mono", samples=SAMPLES_PER_FRAME
+                    )
                     f.sample_rate = SAMPLE_RATE
                     f.time_base = fractions.Fraction(1, SAMPLE_RATE)
                     f.pts = self._webrtc_pts_ref[0]
@@ -406,6 +466,20 @@ class MediaBridge:
         silent = b"\x00" * PCM_FRAME_BYTES
         while not self._stop.is_set():
             try:
+                if self._pyvoip_external and self._pyvoip_tx_queue is not None:
+                    if self._jitter_buffer_element:
+                        pcm = self._jitter_buffer_element.popleft()
+                    else:
+                        pcm = silent
+                    if self.sip_codec == "ulaw":
+                        ulaw = self._ulaw_encode_from_48k(pcm)
+                        if ulaw:
+                            try:
+                                self._pyvoip_tx_queue.put_nowait(ulaw)
+                            except queue.Full:
+                                pass
+                    await asyncio.sleep(PLAYOUT_INTERVAL)
+                    continue
                 if self._peer_sip and self._peer_rtp_ssrc_set:
                     if self._opus_encoder is None:
                         try:
@@ -413,7 +487,10 @@ class MediaBridge:
                         except Exception as e:
                             if not getattr(self, "_logged_encoder_fail", False):
                                 self._logged_encoder_fail = True
-                                print(f"[MediaBridge] Opus encoder init failed (Element→SIP send disabled): {e}", flush=True)
+                                print(
+                                    f"[MediaBridge] Opus encoder init failed (Element→SIP send disabled): {e}",
+                                    flush=True,
+                                )
                     if self._jitter_buffer_element:
                         pcm = self._jitter_buffer_element.popleft()
                     else:
@@ -433,11 +510,24 @@ class MediaBridge:
                     if opus_payload and self._sock:
                         if not getattr(self, "_logged_first_send_to_sip", False):
                             self._logged_first_send_to_sip = True
-                            print(f"[MediaBridge] First RTP sent to SIP peer {self._peer_sip} (Element→SIP path).", flush=True)
+                            print(
+                                f"[MediaBridge] First RTP sent to SIP peer {self._peer_sip} (Element→SIP path).",
+                                flush=True,
+                            )
                         self._rtp_seq = (self._rtp_seq + 1) & 0xFFFF
-                        inc = RTP_TIMESTAMP_INCREMENT_ULAW if self.sip_codec == "ulaw" else RTP_TIMESTAMP_INCREMENT
+                        inc = (
+                            RTP_TIMESTAMP_INCREMENT_ULAW
+                            if self.sip_codec == "ulaw"
+                            else RTP_TIMESTAMP_INCREMENT
+                        )
                         self._rtp_ts = (self._rtp_ts + inc) & 0xFFFFFFFF
-                        packet = rtp_build(opus_payload, self._rtp_seq, self._rtp_ts, self._rtp_ssrc, payload_type=pt)
+                        packet = rtp_build(
+                            opus_payload,
+                            self._rtp_seq,
+                            self._rtp_ts,
+                            self._rtp_ssrc,
+                            payload_type=pt,
+                        )
                         self._sock.sendto(packet, self._peer_sip)
             except (OSError, Exception):
                 pass
@@ -452,7 +542,9 @@ class MediaBridge:
 
     def create_offer(self) -> str:
         if self._loop is None or self._sip_to_webrtc_queue is None:
-            raise RuntimeError("MediaBridge not ready (start() may have returned too early)")
+            raise RuntimeError(
+                "MediaBridge not ready (start() may have returned too early)"
+            )
         fut = asyncio.run_coroutine_threadsafe(self._create_offer(), self._loop)
         try:
             return fut.result(timeout=15)
@@ -467,6 +559,7 @@ class MediaBridge:
             RTCIceServer,
             MediaStreamTrack,
         )
+
         aq = self._sip_to_webrtc_queue
         pts_ref = self._webrtc_pts_ref
         silent = b"\x00" * PCM_FRAME_BYTES
@@ -474,18 +567,25 @@ class MediaBridge:
         class SipToWebRtcTrack(MediaStreamTrack):
             kind = "audio"
             _recv_logged = False
+
             def __init__(self):
                 super().__init__()
+
             async def recv(self):
                 try:
                     frame = await asyncio.wait_for(aq.get(), timeout=PLAYOUT_INTERVAL)
                     if not SipToWebRtcTrack._recv_logged:
                         SipToWebRtcTrack._recv_logged = True
-                        print("[MediaBridge] First frame to Element (queue → WebRTC).", flush=True)
+                        print(
+                            "[MediaBridge] First frame to Element (queue → WebRTC).",
+                            flush=True,
+                        )
                     return frame
                 except asyncio.TimeoutError:
                     pass
-                f = av.AudioFrame(format="s16", layout="mono", samples=SAMPLES_PER_FRAME)
+                f = av.AudioFrame(
+                    format="s16", layout="mono", samples=SAMPLES_PER_FRAME
+                )
                 f.sample_rate = SAMPLE_RATE
                 f.time_base = fractions.Fraction(1, SAMPLE_RATE)
                 f.pts = pts_ref[0]
@@ -504,7 +604,9 @@ class MediaBridge:
         self._sip_playout_started = False
         self._logged_first_rtp_from_sip = False
         self._logged_first_element_frame = False
-        stun = (os.environ.get("MEDIABRIDGE_STUN", "stun:stun.l.google.com:19302") or "").strip()
+        stun = (
+            os.environ.get("MEDIABRIDGE_STUN", "stun:stun.l.google.com:19302") or ""
+        ).strip()
         ice = [RTCIceServer(urls=stun)] if stun else []
         self._pc = RTCPeerConnection(configuration=RTCConfiguration(iceServers=ice))
         self._local_ice_candidates = []
@@ -526,20 +628,167 @@ class MediaBridge:
                     f"candidate:{getattr(c, 'foundation', '0')} {c.component} {c.protocol} "
                     f"{c.priority} {c.ip} {c.port} typ {c.type} generation 0"
                 )
-                self._local_ice_candidates.append({
-                    "candidate": cand_str, "sdpMid": mid, "sdpMLineIndex": mline,
-                })
+                self._local_ice_candidates.append(
+                    {
+                        "candidate": cand_str,
+                        "sdpMid": mid,
+                        "sdpMLineIndex": mline,
+                    }
+                )
         return (self._pc.localDescription or offer).sdp
+
+    def create_answer_from_remote_offer(
+        self,
+        offer_sdp: str,
+        remote_ice_candidates: list[tuple[str, str | None, int | None]] | None = None,
+    ) -> str:
+        """WebRTC answer when the remote (Element) sent the offer (reverse / Matrix-originated call)."""
+        if self._loop is None or self._sip_to_webrtc_queue is None:
+            raise RuntimeError(
+                "MediaBridge not ready (start() may have returned too early)"
+            )
+        fut = asyncio.run_coroutine_threadsafe(
+            self._create_answer_from_remote_offer(offer_sdp, remote_ice_candidates),
+            self._loop,
+        )
+        try:
+            return fut.result(timeout=20)
+        except concurrent.futures.TimeoutError:
+            raise RuntimeError(
+                "create_answer_from_remote_offer timed out (20s)"
+            ) from None
+
+    async def _create_answer_from_remote_offer(
+        self,
+        offer_sdp: str,
+        remote_ice_candidates: list[tuple[str, str | None, int | None]] | None = None,
+    ) -> str:
+        import av
+        from aiortc import (
+            RTCPeerConnection,
+            RTCConfiguration,
+            RTCIceServer,
+            RTCSessionDescription,
+            MediaStreamTrack,
+        )
+
+        aq = self._sip_to_webrtc_queue
+        pts_ref = self._webrtc_pts_ref
+        silent = b"\x00" * PCM_FRAME_BYTES
+
+        class SipToWebRtcTrack(MediaStreamTrack):
+            kind = "audio"
+            _recv_logged = False
+
+            def __init__(self):
+                super().__init__()
+
+            async def recv(self):
+                try:
+                    frame = await asyncio.wait_for(aq.get(), timeout=PLAYOUT_INTERVAL)
+                    if not SipToWebRtcTrack._recv_logged:
+                        SipToWebRtcTrack._recv_logged = True
+                        print(
+                            "[MediaBridge] First frame to Element (queue → WebRTC).",
+                            flush=True,
+                        )
+                    return frame
+                except asyncio.TimeoutError:
+                    pass
+                f = av.AudioFrame(
+                    format="s16", layout="mono", samples=SAMPLES_PER_FRAME
+                )
+                f.sample_rate = SAMPLE_RATE
+                f.time_base = fractions.Fraction(1, SAMPLE_RATE)
+                f.pts = pts_ref[0]
+                pts_ref[0] += SAMPLES_PER_FRAME
+                for plane in f.planes:
+                    plane.update(b"\x00" * PCM_FRAME_BYTES)
+                return f
+
+        if self._pc:
+            try:
+                await self._pc.close()
+            except Exception:
+                pass
+            self._pc = None
+        self._sip_playout_started = False
+        self._logged_first_rtp_from_sip = False
+        self._logged_first_element_frame = False
+        self._element_pcm_buffer.clear()
+        self._jitter_buffer_sip.clear()
+        self._jitter_buffer_element.clear()
+        self._webrtc_pts_ref[0] = 0
+        self._peer_sip = None
+        self._peer_rtp_ssrc_set = False
+        self._rtp_seq = 0
+        self._rtp_ts = 0
+
+        stun = (
+            os.environ.get("MEDIABRIDGE_STUN", "stun:stun.l.google.com:19302") or ""
+        ).strip()
+        ice = [RTCIceServer(urls=stun)] if stun else []
+        self._pc = RTCPeerConnection(configuration=RTCConfiguration(iceServers=ice))
+        self._local_ice_candidates = []
+        self._pc.on("track", self._on_remote_track)
+        self._send_track = SipToWebRtcTrack()
+        self._pc.addTrack(self._send_track)
+
+        sdp = _ensure_rtcp_mux_in_sdp(offer_sdp)
+        await self._pc.setRemoteDescription(
+            RTCSessionDescription(sdp=sdp, type="offer")
+        )
+        for cand, mid, idx in remote_ice_candidates or []:
+            if not cand or str(cand).strip() in ("", "end-of-candidates"):
+                continue
+            try:
+                from aioice import Candidate as AioiceCandidate
+                from aiortc.rtcicetransport import candidate_from_aioice
+
+                aio = AioiceCandidate.from_sdp(str(cand).strip())
+                ic = candidate_from_aioice(aio)
+                ic.sdpMid = mid or "0"
+                ic.sdpMLineIndex = idx if idx is not None else 0
+                await self._pc.addIceCandidate(ic)
+            except Exception:
+                pass
+        answer = await self._pc.createAnswer()
+        await self._pc.setLocalDescription(answer)
+        for _ in range(50):
+            if self._pc.iceGatheringState == "complete":
+                break
+            await asyncio.sleep(0.05)
+        for tr in self._pc.getTransceivers():
+            ice_transport = tr.receiver.transport.transport
+            mid = tr.mid or "0"
+            mline = tr._get_mline_index() if hasattr(tr, "_get_mline_index") else 0
+            for c in ice_transport.iceGatherer.getLocalCandidates():
+                cand_str = (
+                    f"candidate:{getattr(c, 'foundation', '0')} {c.component} {c.protocol} "
+                    f"{c.priority} {c.ip} {c.port} typ {c.type} generation 0"
+                )
+                self._local_ice_candidates.append(
+                    {
+                        "candidate": cand_str,
+                        "sdpMid": mid,
+                        "sdpMLineIndex": mline,
+                    }
+                )
+        await self._ensure_sender_started()
+        return (self._pc.localDescription or answer).sdp
 
     def get_local_ice_candidates(self) -> list[dict]:
         return list(getattr(self, "_local_ice_candidates", []))
 
     def set_remote_answer(self, sdp: str) -> None:
         from aiortc import RTCSessionDescription
+
         # Element may send answer without a=rtcp-mux; aiortc requires it
         sdp = _ensure_rtcp_mux_in_sdp(sdp)
         fut = asyncio.run_coroutine_threadsafe(
-            self._pc.setRemoteDescription(RTCSessionDescription(sdp=sdp, type="answer")),
+            self._pc.setRemoteDescription(
+                RTCSessionDescription(sdp=sdp, type="answer")
+            ),
             self._loop,
         )
         fut.result(timeout=10)
@@ -555,7 +804,9 @@ class MediaBridge:
         for tr in self._pc.getTransceivers():
             if tr.kind != "audio":
                 continue
-            direction = getattr(tr, "currentDirection", None) or getattr(tr, "direction", None)
+            direction = getattr(tr, "currentDirection", None) or getattr(
+                tr, "direction", None
+            )
             if direction not in ("sendonly", "sendrecv"):
                 continue
             tr.sender.replaceTrack(our_track)
@@ -573,11 +824,14 @@ class MediaBridge:
         try:
             from aioice import Candidate as AioiceCandidate
             from aiortc.rtcicetransport import candidate_from_aioice
+
             aio = AioiceCandidate.from_sdp(candidate.strip())
             c = candidate_from_aioice(aio)
             c.sdpMid = sdp_mid or "0"
             c.sdpMLineIndex = sdp_mline_index if sdp_mline_index is not None else 0
-            fut = asyncio.run_coroutine_threadsafe(self._pc.addIceCandidate(c), self._loop)
+            fut = asyncio.run_coroutine_threadsafe(
+                self._pc.addIceCandidate(c), self._loop
+            )
             fut.result(timeout=5)
         except Exception:
             pass
@@ -590,10 +844,11 @@ class MediaBridge:
     async def _consume_remote_track(self, track) -> None:
         """Element → SIP: read remote track (PCM from aiortc), convert to s16 if needed, accumulate to 20 ms, push to send buffer."""
         import av
+
         buf = self._element_pcm_buffer
         resampler = None  # for format conversion (e.g. float → s16)
         logged_first = getattr(self, "_logged_first_element_frame", False)
-        while not self._stop.is_set() and self._peer_sip:
+        while not self._stop.is_set() and self._pc:
             try:
                 frame = await asyncio.wait_for(track.recv(), timeout=2.0)
             except (asyncio.TimeoutError, Exception):
@@ -607,7 +862,9 @@ class MediaBridge:
                 continue
             if fmt and str(fmt) != "s16":
                 if resampler is None:
-                    resampler = av.AudioResampler(format="s16", layout="mono", rate=SAMPLE_RATE)
+                    resampler = av.AudioResampler(
+                        format="s16", layout="mono", rate=SAMPLE_RATE
+                    )
                 try:
                     converted = resampler.resample(frame)
                     raw = b"".join(bytes(r.planes[0]) for r in (converted or []))
@@ -621,7 +878,10 @@ class MediaBridge:
             if not logged_first:
                 logged_first = True
                 self._logged_first_element_frame = True
-                print("[MediaBridge] First frame from Element (Element→SIP path); feeding send buffer.", flush=True)
+                print(
+                    "[MediaBridge] First frame from Element (Element→SIP path); feeding send buffer.",
+                    flush=True,
+                )
             if len(buf) > PCM_FRAME_BYTES * 10:
                 del buf[:PCM_FRAME_BYTES]
             buf.extend(raw)

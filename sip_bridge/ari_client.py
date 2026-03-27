@@ -53,9 +53,27 @@ def ari_http(
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             raw = resp.read().decode()
-            if not raw:
+            status = getattr(resp, "status", 200) or 200
+            # Many ARI POSTs return 200/204 with an empty body (e.g. answer) — that is success, not failure.
+            if status in (200, 201, 204) and not raw.strip():
+                return {}
+            if not raw.strip():
                 return None
             return json.loads(raw)
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            err_body = ""
+        short = (err_body[:800] + "…") if len(err_body) > 800 else err_body
+        logger.warning(
+            "ARI HTTP %s %s -> HTTP %s: %s",
+            method,
+            path,
+            e.code,
+            short or "(no body)",
+        )
+        return None
     except Exception as e:
         logger.warning("ARI HTTP %s %s failed: %s", method, path, e)
         return None
@@ -142,6 +160,57 @@ def answer_channel(base: str, user: str, password: str, channel_id: str) -> bool
     """POST /ari/channels/{channelId}/answer (for incoming channel)."""
     result = ari_http(base, "POST", f"/channels/{channel_id}/answer", user, password)
     return result is not None
+
+
+def setup_external_media_for_sip_channel(
+    base: str,
+    user: str,
+    password: str,
+    app_name: str,
+    sip_channel_id: str,
+    our_rtp_host: str,
+    our_rtp_port: int,
+    format_codec: str = "ulaw",
+) -> bool:
+    """
+    Answer SIP channel, create External Media + mixing bridge (same as StasisStart handler).
+    Single place so ARI Originate + REST can reuse without duplicating the WebSocket handler.
+    """
+    if not answer_channel(base, user, password, sip_channel_id):
+        logger.warning(
+            "ARI: POST /channels/%s/answer failed (channel gone, auth, or Asterisk error)",
+            sip_channel_id,
+        )
+        return False
+    ext_ch = create_external_media_channel(
+        base, user, password, app_name, our_rtp_host, our_rtp_port, format_codec
+    )
+    if not ext_ch or not ext_ch.get("id"):
+        logger.warning(
+            "ARI: POST /channels/externalMedia failed (sip=%s external_host=%s:%s codec=%s). "
+            "Response was: %s",
+            sip_channel_id,
+            our_rtp_host,
+            our_rtp_port,
+            format_codec,
+            ext_ch,
+        )
+        return False
+    ext_id = ext_ch["id"]
+    bridge = create_bridge(base, user, password)
+    if not bridge or not bridge.get("id"):
+        logger.warning("ARI: POST /bridges failed after externalMedia id=%s", ext_id)
+        return False
+    bid = bridge["id"]
+    if not add_channel_to_bridge(base, user, password, bid, sip_channel_id):
+        logger.warning("ARI: addChannel sip=%s to bridge=%s failed", sip_channel_id, bid)
+        return False
+    if not add_channel_to_bridge(base, user, password, bid, ext_id):
+        logger.warning(
+            "ARI: addChannel externalMedia=%s to bridge=%s failed (SIP ok)", ext_id, bid
+        )
+        return False
+    return True
 
 
 def channel_still_exists(base: str, user: str, password: str, channel_id: str) -> bool:
@@ -245,50 +314,22 @@ async def run_ari_websocket(
                         if "PJSIP" in channel_name or "SIP" in channel_name or extension.isdigit():
                             logger.info("StasisStart channel=%s extension=%s", channel_id, extension)
                             # Answer the channel so we get media
-                            await loop.run_in_executor(
+                            ok_media = await loop.run_in_executor(
                                 None,
-                                lambda: answer_channel(base_http, user, password, channel_id),
-                            )
-                            # Create External Media channel (Asterisk will send RTP to us)
-                            ext_ch = await loop.run_in_executor(
-                                None,
-                                lambda: create_external_media_channel(
+                                lambda: setup_external_media_for_sip_channel(
                                     base_http,
                                     user,
                                     password,
                                     app_name,
+                                    channel_id,
                                     our_rtp_host,
                                     our_rtp_port,
                                     format_codec,
                                 ),
                             )
-                            if not ext_ch:
-                                logger.warning("Failed to create External Media channel")
+                            if not ok_media:
+                                logger.warning("External Media / bridge setup failed for %s", channel_id)
                                 continue
-                            ext_id = ext_ch.get("id")
-                            if not ext_id:
-                                continue
-                            # Create bridge and add both channels
-                            bridge = await loop.run_in_executor(
-                                None,
-                                lambda: create_bridge(base_http, user, password),
-                            )
-                            if not bridge:
-                                continue
-                            bridge_id = bridge.get("id")
-                            if bridge_id:
-                                await loop.run_in_executor(
-                                    None,
-                                    lambda: add_channel_to_bridge(
-                                        base_http, user, password, bridge_id, channel_id
-                                    ),
-                                )
-                                await loop.run_in_executor(
-                                    None,
-                                    lambda: add_channel_to_bridge(
-                                        base_http, user, password, bridge_id, ext_id
-                                    ),
-                                )
                             # Notify bridge: (sip_channel_id, extension)
                             try:
                                 on_incoming_call(channel_id, extension)

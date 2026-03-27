@@ -56,6 +56,40 @@ def parse_sync_for_answer_with_party_id(sync_response, room_id: str, call_id: st
     return None
 
 
+def trickle_ice_tuples_from_m_call_event(
+    ev_type: str, content: dict,
+) -> list[tuple[str, str | None, int | None]]:
+    """m.call.candidates / m.call.candidate -> [(candidate, sdpMid, sdpMLineIndex), ...]."""
+    out: list[tuple[str, str | None, int | None]] = []
+    if ev_type == "m.call.candidates":
+        for c in content.get("candidates") or []:
+            cand = c if isinstance(c, str) else (c.get("candidate") if isinstance(c, dict) else None)
+            if not cand or not str(cand).strip():
+                continue
+            mid = c.get("sdpMid") if isinstance(c, dict) else None
+            idx = c.get("sdpMLineIndex") if isinstance(c, dict) else None
+            if idx is not None and not isinstance(idx, int):
+                try:
+                    idx = int(idx)
+                except (TypeError, ValueError):
+                    idx = 0
+            out.append((str(cand).strip(), mid, idx))
+    elif ev_type == "m.call.candidate":
+        cand = content.get("candidate")
+        if isinstance(cand, dict):
+            cand = cand.get("candidate")
+        if cand and str(cand).strip():
+            mid = content.get("sdpMid")
+            idx = content.get("sdpMLineIndex")
+            if idx is not None and not isinstance(idx, int):
+                try:
+                    idx = int(idx)
+                except (TypeError, ValueError):
+                    idx = 0
+            out.append((str(cand).strip(), mid, idx))
+    return out
+
+
 def parse_sync_for_candidates_from_response(
     sync_response, room_id: str, call_id: str
 ) -> list[tuple[str, str | None, int | None]]:

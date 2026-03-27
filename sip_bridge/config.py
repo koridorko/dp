@@ -1,4 +1,4 @@
-"""SIP bridge configuration and constants (Asterisk + Matrix, no Kamailio/RTPEngine)."""
+"""SIP bridge configuration and constants (Asterisk + Matrix)."""
 
 import os
 
