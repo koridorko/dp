@@ -35,4 +35,4 @@ if ! podman ps --filter "name=^${CONTAINER_NAME}$" --format "{{.Names}}" | grep 
   exit 1
 fi
 echo "Asterisk is running. ARI: http://127.0.0.1:8088/ari (user: matrix_bridge). Logs: podman logs -f $CONTAINER_NAME"
-echo "Linphone: Server 127.0.0.1:5061 (Domain: 127.0.0.1:5061)
+echo "Linphone: Server 127.0.0.1:5061 (Domain: 127.0.0.1:5061)"

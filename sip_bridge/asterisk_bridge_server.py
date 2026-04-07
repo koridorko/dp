@@ -38,6 +38,7 @@ from .config import (
     SYNC_POLL_MS,
 )
 from .sdp_utils import sdp_summary, inject_ice_candidates_into_sdp
+from .ari_client import resolve_caller_sip_identity
 
 # MediaBridge: RTP (ulaw from Asterisk) <-> WebRTC (Opus to Element)
 try:
@@ -205,7 +206,35 @@ async def handle_incoming_call(
             await asyncio.sleep(0.5)
 
     # Create WebRTC offer and send m.call.invite
+
+    # Notify room with caller SIP identity (From / PJSIP remote) before m.call.invite
+    caller_identity = ""
+    base, auser, apwd = bridge.ari_base, bridge.ari_user, bridge.ari_pass
+    if base and auser is not None and apwd is not None:
+        sip_domain = (os.environ.get("ASTERISK_SIP_DOMAIN") or "").strip()
+        loop = asyncio.get_event_loop()
+        caller_identity = await loop.run_in_executor(
+            None,
+            lambda: resolve_caller_sip_identity(
+                base, auser, apwd, sip_channel_id, sip_domain
+            ),
+        )
+
     try:
+        print(f"[Asterisk] Sending message to {matrix_user_id}")
+        client = bot.client
+        if caller_identity:
+            body = (
+                f"Incoming call from {caller_identity} at matrix bridge"
+            )
+        else:
+            body = f"Calling you from {extension} at matrix bridge"
+        await client.room_send(
+            room_id, "m.room.message", {"msgtype": "m.text", "body": body}
+        )
+        print(
+            f"[Asterisk] Creating offer for ext={extension} caller={caller_identity or '?'} room={room_id}"
+        )
         offer_sdp = await asyncio.get_event_loop().run_in_executor(
             None, bridge.media_bridge.create_offer
         )

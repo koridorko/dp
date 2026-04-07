@@ -11,6 +11,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,57 @@ def setup_external_media_for_sip_channel(
         )
         return False
     return True
+
+
+def get_channel_variable(
+    base: str,
+    user: str,
+    password: str,
+    channel_id: str,
+    variable: str,
+) -> str | None:
+    """GET /ari/channels/{channelId}/variable?variable=... Returns the value or None."""
+    result = ari_http(
+        base,
+        "GET",
+        f"/channels/{channel_id}/variable",
+        user,
+        password,
+        query={"variable": variable},
+    )
+    if not result or not isinstance(result, dict):
+        return None
+    val = result.get("value")
+    if val is None:
+        return None
+    s = str(val).strip()
+    return s if s else None
+
+
+def resolve_caller_sip_identity(
+    base: str,
+    user: str,
+    password: str,
+    channel_id: str,
+    sip_domain_for_callerid: str = "",
+) -> str:
+    """
+    Best-effort SIP identity for the caller (From / remote party).
+    Tries CHANNEL(pjsip,remote_uri), then sip:CALLERID(num)@domain when domain is set,
+    else CALLERID(num) or empty string.
+    """
+    u = get_channel_variable(
+        base, user, password, channel_id, "CHANNEL(pjsip,remote_uri)"
+    )
+    if u:
+        name, uri = u.split(" ")
+        return name.replace("\"", "").replace("\\", "").upper() + " " + uri
+    num = get_channel_variable(base, user, password, channel_id, "CALLERID(num)")
+    if not num:
+        return ""
+    if sip_domain_for_callerid and not num.lower().startswith("sip:"):
+        return f"sip:{num}@{sip_domain_for_callerid}"
+    return num
 
 
 def channel_still_exists(base: str, user: str, password: str, channel_id: str) -> bool:
