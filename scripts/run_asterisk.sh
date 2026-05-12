@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 # Runs Asterisk in a Podman container. 
 # Linphone: SIP server = host IP (or 127.0.0.1 with --network host); dial e.g. sip:111@127.0.0.1
 set -e

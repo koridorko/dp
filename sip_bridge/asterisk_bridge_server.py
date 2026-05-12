@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """
 Asterisk + Matrix bridge:
 - Asterisk receives SIP (Linphone), sends call to Stasis(matrix-bridge, EXTEN).

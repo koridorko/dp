@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """Tests for sip_bridge.ari_client: URL building, channel variables, caller identity (mocked HTTP)."""
 
 import os

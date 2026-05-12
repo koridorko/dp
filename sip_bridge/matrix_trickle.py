@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """Shared Matrix voice-call completion: m.call.answer, local ICE, remote trickle, select_answer."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """1:1 room pairing for Matrix→SIP reverse bridge (env + invite handling)."""
 
 from __future__ import annotations

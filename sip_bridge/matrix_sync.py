@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """
 Matrix sync and call-event parsing (nio-based).
 Room finding, m.call.answer/candidates/hangup, nio schema patch.

@@ -1,17 +1,6 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """
-MediaBridge: bidirectional audio relay between SIP (RTP/Opus or PCMU) and Matrix/Element (WebRTC/Opus).
-
-Requires Linphone (and our 200 OK SDP) to use Opus 48 kHz. Single sample rate = 48 kHz, no resampling.
-
-Why we decode and encode even though both clients use Opus:
-- Linphone sends us RTP packets (UDP) whose payload is Opus. We have no "Opus pipe" to Element:
-  our side of the call is WebRTC via aiortc. The WebRTC API is MediaStreamTrack: we must feed
-  PCM (raw samples) to our send track; aiortc then encodes PCM→Opus and sends to Element.
-  So we must decode Opus (from Linphone RTP) → PCM to feed the track.
-- Element sends us Opus over WebRTC; aiortc decodes it and gives us PCM in track.recv().
-  We must encode that PCM → Opus and put it in RTP packets to send to Linphone.
-So: RTP(Opus) ↔ PCM ↔ WebRTC(Opus). The bridge always works in PCM internally; decode/encode
-are only at the RTP boundaries.
+MediaBridge: bidirectional audio relay between SIP and Matrix (WebRTC/Opus).
 
 Architecture: one event loop + one decoder thread. Socket is non-blocking, add_reader in loop.
 - RTP from Linphone: add_reader callback parses → put in raw_rtp_queue → decoder thread decodes → call_soon_threadsafe appends to jitter_buffer_sip.

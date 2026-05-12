@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """File with implementation of Matrix Bot Class"""
 
 import asyncio

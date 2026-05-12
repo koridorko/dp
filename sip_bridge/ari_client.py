@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """
 Asterisk ARI client: WebSocket events + REST. Stasis app 'matrix-bridge'.
 On StasisStart we create External Media channel, bridge it with the SIP channel,

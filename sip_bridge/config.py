@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """SIP bridge configuration and constants (Asterisk + Matrix)."""
 
 import os

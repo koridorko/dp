@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """Tests for MediaBridge: Opus RTP helpers and bridge lifecycle."""
 
 import os

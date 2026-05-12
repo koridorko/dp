@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """
 Optional one-shot patch for aioice: STUN retransmit after ICE UDP transport is closed.
 

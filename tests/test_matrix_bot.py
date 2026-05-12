@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """Tests for Matrix bot: env vars, instance creation, optional connect."""
 
 import asyncio

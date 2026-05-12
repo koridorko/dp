@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """
 Check Matrix bot: loads bot/.env, tries login.
 Run from project root: poetry run python scripts/check_matrix_bot.py

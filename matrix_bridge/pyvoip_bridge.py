@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """
 Outbound SIP call via pyVoIP (VoIPPhone + VoIPCall), audio bridged to MediaBridge (PCMU ↔ 48 kHz PCM).
 

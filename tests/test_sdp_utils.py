@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """Tests for sip_bridge.sdp_utils: SIP header parsing and SDP helpers (no network)."""
 
 import os

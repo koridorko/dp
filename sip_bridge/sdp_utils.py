@@ -1,3 +1,4 @@
+# Author: Štefan Gajdošík <xgajdo30@stud.fit.vut.cz>
 """SDP and SIP header helpers for the bridge. All bridge-generated SDP uses Opus 48 kHz (no PCMU)."""
 
 import re
