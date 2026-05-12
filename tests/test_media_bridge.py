@@ -10,18 +10,13 @@ if _root not in sys.path:
 
 import pytest
 
-from MediaBridge import (
-    MediaBridge,
-    rtp_build,
-    rtp_parse,
-    RTP_HEADER_SIZE,
-    RTP_PAYLOAD_TYPE_OPUS,
-)
-
+from MediaBridge import (RTP_HEADER_SIZE, RTP_PAYLOAD_TYPE_OPUS, MediaBridge,
+                         rtp_build, rtp_parse)
 
 # ---------------------------------------------------------------------------
 # RTP
 # ---------------------------------------------------------------------------
+
 
 def test_rtp_parse_valid():
     """Parse valid RTP packet returns (payload, pt, seq, ts, ssrc)."""
@@ -55,6 +50,7 @@ def test_rtp_build_header_length():
 # MediaBridge lifecycle
 # ---------------------------------------------------------------------------
 
+
 def test_media_bridge_get_sip_rtp_bind_addr():
     """get_sip_rtp_bind_addr returns (host, port); 0.0.0.0 -> 127.0.0.1; advertised_host overrides."""
     bridge = MediaBridge(sip_rtp_port=19050, listen_host="0.0.0.0")
@@ -64,7 +60,9 @@ def test_media_bridge_get_sip_rtp_bind_addr():
     bridge2 = MediaBridge(sip_rtp_port=19051, listen_host="127.0.0.1")
     h2, p2 = bridge2.get_sip_rtp_bind_addr()
     assert h2 == "127.0.0.1" and p2 == 19051
-    bridge3 = MediaBridge(sip_rtp_port=19052, listen_host="0.0.0.0", advertised_host="192.168.1.100")
+    bridge3 = MediaBridge(
+        sip_rtp_port=19052, listen_host="0.0.0.0", advertised_host="192.168.1.100"
+    )
     h3, p3 = bridge3.get_sip_rtp_bind_addr()
     assert h3 == "192.168.1.100" and p3 == 19052
 
@@ -76,7 +74,12 @@ def test_media_bridge_start_stop():
     bridge.start()
     try:
         # RTP packet with Opus PT=96 (decode may return empty for fake payload; no crash)
-        raw = bytes([0x80, 0x60, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]) + b"\x00" * 40
+        raw = (
+            bytes(
+                [0x80, 0x60, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]
+            )
+            + b"\x00" * 40
+        )
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.sendto(raw, ("127.0.0.1", 19060))
         sock.close()

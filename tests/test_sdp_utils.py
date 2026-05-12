@@ -7,13 +7,10 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
-from sip_bridge.sdp_utils import (
-    extract_uri_from_from_header,
-    parse_tag_from_header,
-    parse_via_host_port,
-    parse_sdp_rtp_endpoint,
-    replace_sdp_connection_with_host,
-)
+from sip_bridge.sdp_utils import (extract_uri_from_from_header,
+                                  parse_sdp_rtp_endpoint,
+                                  parse_tag_from_header, parse_via_host_port,
+                                  replace_sdp_connection_with_host)
 
 
 def test_extract_uri_from_from_header_angled():
@@ -30,10 +27,7 @@ def test_extract_uri_from_from_header_empty():
 
 
 def test_parse_tag_from_header():
-    assert (
-        parse_tag_from_header('sip:a@b;tag=hello')
-        == "hello"
-    )
+    assert parse_tag_from_header("sip:a@b;tag=hello") == "hello"
     assert parse_tag_from_header("no tag here") == "default"
 
 

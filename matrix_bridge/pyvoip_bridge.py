@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 import queue
+import socket
 import threading
 import time
 
@@ -67,7 +68,9 @@ class PyVoipAudioBridge:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        self._thread = threading.Thread(target=self._loop, name="pyvoip-audio", daemon=True)
+        self._thread = threading.Thread(
+            target=self._loop, name="pyvoip-audio", daemon=True
+        )
         self._thread.start()
 
     def stop(self) -> None:
@@ -133,8 +136,6 @@ def build_voip_phone_from_env() -> VoIPPhone:
 
 
 def _detect_local_ip() -> str:
-    import socket
-
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(0.5)

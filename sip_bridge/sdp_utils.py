@@ -32,7 +32,8 @@ def parse_tag_from_header(header_value: str) -> str:
 
 def parse_via_host_port(via_header: str, default_port: int = 5061) -> tuple[str, int]:
     """Parse first Via (e.g. SIP/2.0/UDP 127.0.0.1:5060;branch=...) -> (host, port).
-    Default 5061 = Kamailio listen port so BYE from bridge (Matrix hangup) reaches Kamailio and gets forwarded to Linphone."""
+    Default 5061 = Kamailio listen port so BYE from bridge (Matrix hangup) reaches Kamailio and gets forwarded to Linphone.
+    """
     if not via_header:
         return ("127.0.0.1", default_port)
     first = via_header.strip().split(",")[0].strip()
@@ -120,7 +121,11 @@ def sanitize_rtpengine_answer_sdp_for_linphone(sdp: str) -> str:
             # m=audio <port> <proto> <fmt> [fmt...] – port=parts[0], proto=parts[1], payload types=parts[2:]
             if len(parts) >= 2 and first_audio_port is None:
                 first_audio_port = parts[0]
-                first_audio_proto = parts[1] if len(parts) >= 2 and not parts[1].isdigit() else "RTP/AVP"
+                first_audio_proto = (
+                    parts[1]
+                    if len(parts) >= 2 and not parts[1].isdigit()
+                    else "RTP/AVP"
+                )
                 i += 1
                 while i < len(lines):
                     ln = lines[i]
@@ -157,7 +162,10 @@ def sanitize_rtpengine_answer_sdp_for_linphone(sdp: str) -> str:
         if s.startswith(M_AUDIO_PREFIX):
             if not in_first_audio and first_audio_port is not None:
                 in_first_audio = True
-                out.append(f"m=audio {first_audio_port} {first_audio_proto} " + " ".join(str(p) for p in valid_pts))
+                out.append(
+                    f"m=audio {first_audio_port} {first_audio_proto} "
+                    + " ".join(str(p) for p in valid_pts)
+                )
                 for pt in valid_pts:
                     if pt in rtpmap_first and pt not in seen_pt:
                         out.append(rtpmap_first[pt])
@@ -207,7 +215,9 @@ def sdp_summary(sdp: str | None, max_lines: int = 20) -> str:
     key_lines = [ln.strip() for ln in lines if ln.strip().startswith(("c=", "m="))]
     if not key_lines:
         return "(no c=/m=) " + sdp[:200].replace("\n", " ")
-    return " | ".join(key_lines[:10]) + (f" ... ({len(key_lines)} c/m lines)" if len(key_lines) > 10 else "")
+    return " | ".join(key_lines[:10]) + (
+        f" ... ({len(key_lines)} c/m lines)" if len(key_lines) > 10 else ""
+    )
 
 
 # Static RTP payload types (RFC 3551). Linphone sends these in m=audio but often omits a=rtpmap; RTPEngine needs explicit rtpmap to avoid "unknown codec".
@@ -280,7 +290,8 @@ def ensure_offer_has_amid(sdp: str) -> str:
 
 def parse_ice_candidates_from_sdp(sdp: str) -> list[dict]:
     """Extract a=candidate lines from SDP into format for Matrix m.call.candidates.
-    Returns list of dicts with keys candidate, sdpMid, sdpMLineIndex (0-based m= section index)."""
+    Returns list of dicts with keys candidate, sdpMid, sdpMLineIndex (0-based m= section index).
+    """
     if not sdp:
         return []
     lines = sdp.replace("\r\n", "\n").replace("\r", "\n").strip().split("\n")
@@ -295,11 +306,13 @@ def parse_ice_candidates_from_sdp(sdp: str) -> list[dict]:
             cand = line[2:].strip()
             if not cand:
                 continue
-            out.append({
-                "candidate": cand,
-                "sdpMid": "0",
-                "sdpMLineIndex": mline_index if mline_index >= 0 else 0,
-            })
+            out.append(
+                {
+                    "candidate": cand,
+                    "sdpMid": "0",
+                    "sdpMLineIndex": mline_index if mline_index >= 0 else 0,
+                }
+            )
     return out
 
 
@@ -328,9 +341,12 @@ def make_host_candidate_from_sdp(sdp: str) -> list[dict]:
     return []
 
 
-def parse_first_candidate_ip_port(candidates: list[str], component_rtp: int = 1) -> tuple[str, int] | None:
+def parse_first_candidate_ip_port(
+    candidates: list[str], component_rtp: int = 1
+) -> tuple[str, int] | None:
     """From first candidate (SDP format candidate:foundation component protocol priority ip port typ ...) return (ip, port).
-    component_rtp=1 means RTP (default). Returns None if no valid candidate or invalid format."""
+    component_rtp=1 means RTP (default). Returns None if no valid candidate or invalid format.
+    """
     for c in candidates:
         c = (c or "").strip()
         if not c:
@@ -352,9 +368,12 @@ def parse_first_candidate_ip_port(candidates: list[str], component_rtp: int = 1)
     return None
 
 
-def apply_answerer_address_in_sdp(sdp: str, ip: str, port: int, payload_type: int = 96) -> str:
+def apply_answerer_address_in_sdp(
+    sdp: str, ip: str, port: int, payload_type: int = 96
+) -> str:
     """Replace in answer SDP c=0.0.0.0 and m=audio 0 with answerer address (ip, port). Used when we have ICE candidates from Element.
-    When forcing PT 96 for RTPEngine, we must send a=rtpmap:96 opus/48000/2 (our offer had 96=Opus), not 96=PCMU from Element's a=rtpmap:0."""
+    When forcing PT 96 for RTPEngine, we must send a=rtpmap:96 opus/48000/2 (our offer had 96=Opus), not 96=PCMU from Element's a=rtpmap:0.
+    """
     if not sdp or not ip or port <= 0:
         return sdp
     lines = sdp.replace("\r\n", "\n").replace("\r", "\n").split("\n")
@@ -381,7 +400,8 @@ def apply_answerer_address_in_sdp(sdp: str, ip: str, port: int, payload_type: in
 
 def inject_ice_candidates_into_sdp(sdp: str, candidates: list[str]) -> str:
     """Add a=candidate:... lines to first audio section of SDP (for RTPEngine / Element answer).
-    candidates: list of strings from Matrix (candidate:... or already a=candidate:...)."""
+    candidates: list of strings from Matrix (candidate:... or already a=candidate:...).
+    """
     if not sdp or not candidates:
         return sdp
     lines = sdp.replace("\r\n", "\n").replace("\r", "\n").split("\n")
@@ -462,13 +482,20 @@ def dedupe_ice_candidates_in_sdp(sdp: str) -> str:
     return "\r\n".join(out)
 
 
-def ensure_answer_has_rtpmap_for_rtpengine(sdp: str, pt_from_offer: int | None = None) -> str:
+def ensure_answer_has_rtpmap_for_rtpengine(
+    sdp: str, pt_from_offer: int | None = None
+) -> str:
     """For each PT in answer's first m=audio that has no a=rtpmap, add it. Avoids 'List of codecs empty' in RTPEngine.
-    m=audio is <port> <proto> <fmt> [fmt...]. If m= has no PT (len<3), add PT 96 and a=rtpmap:96."""
+    m=audio is <port> <proto> <fmt> [fmt...]. If m= has no PT (len<3), add PT 96 and a=rtpmap:96.
+    """
     if not sdp:
         return sdp
     lines = sdp.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    has_rtpmap = {int(m.group(1)) for m in (re.match(r"a=rtpmap:(\d+)\s+", ln) for ln in lines) if m}
+    has_rtpmap = {
+        int(m.group(1))
+        for m in (re.match(r"a=rtpmap:(\d+)\s+", ln) for ln in lines)
+        if m
+    }
     out = []
     first_audio_done = False
     for line in lines:
@@ -523,7 +550,8 @@ def build_minimal_answer_sdp_for_rtpengine(
     offer_sdp: str | None = None,
 ) -> str:
     """Minimal answer SDP for RTPEngine (no WebRTC attributes). PT from offer. Used when Element
-    sends placeholder m=audio 0 – we send a whole new clean SDP instead of editing theirs."""
+    sends placeholder m=audio 0 – we send a whole new clean SDP instead of editing theirs.
+    """
     pt = _first_audio_payload_type_from_sdp(offer_sdp) if offer_sdp else 96
     return (
         f"v=0\r\n"
@@ -561,7 +589,8 @@ def fix_element_answer_for_rtpengine(
     advertised_host: str,
 ) -> str:
     """Adapt Element answer (m=audio 0, c=0.0.0.0) for RTPEngine: c= and m= from our offer,
-    rest (fingerprint, ICE, rtpmap, …) from Element. RTPEngine then returns valid SDP for Linphone."""
+    rest (fingerprint, ICE, rtpmap, …) from Element. RTPEngine then returns valid SDP for Linphone.
+    """
     if not element_answer_sdp:
         return element_answer_sdp
     port = _first_audio_port_from_sdp(our_offer_sdp)
@@ -596,7 +625,8 @@ def make_answer_rewritable_for_rtpengine(
     offer_sdp: str | None = None,
 ) -> str:
     """If Element sends answer with m=audio 0 / c=0.0.0.0, RTPEngine often fails on WebRTC attributes.
-    Return a whole new minimal answer SDP (no fingerprint/ice/msid), otherwise only adjust port/IP."""
+    Return a whole new minimal answer SDP (no fingerprint/ice/msid), otherwise only adjust port/IP.
+    """
     if not sdp:
         return sdp
     if "m=audio 0" in sdp or "0.0.0.0" in sdp:

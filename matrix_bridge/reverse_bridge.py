@@ -19,34 +19,30 @@ import sys
 
 try:
     from dotenv import load_dotenv
+
     _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     load_dotenv(os.path.join(_root, "bot", ".env"))
 except ImportError:
     pass
 
+from bot.MatrixBot import MatrixBot
 from Matrix import MatrixPayloadCreator, make_party_id
 from MediaBridge import MediaBridge
-from bot.MatrixBot import MatrixBot
-
+from nio import RoomSendError
 from sip_bridge.aioice_hangup_patch import install_aioice_stun_hangup_patch
 from sip_bridge.config import DEFAULT_RTP_PORT
-from sip_bridge.matrix_sync import (
-    events_from_room,
-    get_event_type_and_content,
-    nio_sync,
-    patch_nio_call_candidates_schema,
-    trickle_ice_tuples_from_m_call_event,
-)
+from sip_bridge.matrix_sync import (events_from_room,
+                                    get_event_type_and_content, nio_sync,
+                                    patch_nio_call_candidates_schema,
+                                    trickle_ice_tuples_from_m_call_event)
 from sip_bridge.matrix_trickle import finish_matrix_webrtc_setup
 
 from .pairing import load_bridge_user_id, wait_for_paired_room
-from .pyvoip_bridge import (
-    dial_and_bridge_audio,
-    hangup_call,
-    shutdown_phone,
-)
+from .pyvoip_bridge import dial_and_bridge_audio, hangup_call, shutdown_phone
 
-_SIP_IN_TEXT = re.compile(r"sip:[a-zA-Z0-9._~%+!$&'()*;,=\-:]+@[a-zA-Z0-9.\-]+(?::\d+)?", re.I)
+_SIP_IN_TEXT = re.compile(
+    r"sip:[a-zA-Z0-9._~%+!$&'()*;,=\-:]+@[a-zA-Z0-9.\-]+(?::\d+)?", re.I
+)
 _READY = "SIP target saved. Call the bot to bridge audio to that URI."
 
 
@@ -132,13 +128,18 @@ class ReverseBridge:
 
     async def run(self) -> None:
         os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        for v in ("MATRIX_BOT_USERNAME", "MATRIX_BOT_PASSWORD", "MATRIX_BOT_HOMESERVER"):
+        for v in (
+            "MATRIX_BOT_USERNAME",
+            "MATRIX_BOT_PASSWORD",
+            "MATRIX_BOT_HOMESERVER",
+        ):
             if not os.environ.get(v, "").strip():
                 print(f"[reverse] Missing {v}", file=sys.stderr)
                 sys.exit(1)
-        if not (os.environ.get("REVERSE_PYVOIP_SERVER") or "").strip() or not (
-            os.environ.get("REVERSE_PYVOIP_USER") or ""
-        ).strip():
+        if (
+            not (os.environ.get("REVERSE_PYVOIP_SERVER") or "").strip()
+            or not (os.environ.get("REVERSE_PYVOIP_USER") or "").strip()
+        ):
             print(
                 "[reverse] Set REVERSE_PYVOIP_SERVER, REVERSE_PYVOIP_USER, REVERSE_PYVOIP_PASSWORD "
                 "in bot/.env (pyVoIP registration).",
@@ -150,7 +151,9 @@ class ReverseBridge:
         patch_nio_call_candidates_schema()
         install_aioice_stun_hangup_patch()
 
-        rtp_port = int(os.environ.get("REVERSE_BRIDGE_RTP_PORT", str(DEFAULT_RTP_PORT + 2)))
+        rtp_port = int(
+            os.environ.get("REVERSE_BRIDGE_RTP_PORT", str(DEFAULT_RTP_PORT + 2))
+        )
         advertised, adv_reason = _reverse_advertised_rtp_host()
         if adv_reason == "auto:route":
             print(
@@ -184,7 +187,9 @@ class ReverseBridge:
             f"[reverse] {my_id} — pairing with {self._bridge_user_id} (1:1 room only).",
             flush=True,
         )
-        self._paired_room_id = await wait_for_paired_room(self.bot, self._bridge_user_id)
+        self._paired_room_id = await wait_for_paired_room(
+            self.bot, self._bridge_user_id
+        )
         print(
             f"[reverse] Paired in room …{self._paired_room_id[-8:]} — paste sip: URI here, then call.",
             flush=True,
@@ -214,7 +219,9 @@ class ReverseBridge:
                 self.mb.stop()
 
     async def _rooms(self, sync, client, my_id: str) -> None:
-        join = getattr(sync.rooms, "join", None) if getattr(sync, "rooms", None) else None
+        join = (
+            getattr(sync.rooms, "join", None) if getattr(sync, "rooms", None) else None
+        )
         if not join:
             return
         for room_id, room in join.items():
@@ -229,19 +236,26 @@ class ReverseBridge:
                 et, c = get_event_type_and_content(ev)
                 if not et:
                     continue
-                if et == "m.room.message" and c.get("msgtype") == "m.text" and sender != my_id:
+                if (
+                    et == "m.room.message"
+                    and c.get("msgtype") == "m.text"
+                    and sender != my_id
+                ):
                     if self._bridge_user_id and sender != self._bridge_user_id:
                         continue
                     uri = _sip_in_message(c.get("body") or "")
                     if uri:
                         self.room_sip[room_id] = uri
                         print(f"[reverse] {room_id[-8:]} → {uri}", flush=True)
-                        from nio import RoomSendError
-                        r = await client.room_send(room_id, "m.room.message", {"msgtype": "m.text", "body": _READY})
+
+                        r = await client.room_send(
+                            room_id,
+                            "m.room.message",
+                            {"msgtype": "m.text", "body": _READY},
+                        )
                         if isinstance(r, RoomSendError):
                             print(f"[reverse] send: {r}", file=sys.stderr)
                     else:
-                        from nio import RoomSendError
                         r = await client.room_send(
                             room_id,
                             "m.room.message",
@@ -274,13 +288,14 @@ class ReverseBridge:
                 pre: list[tuple[str, str | None, int | None]] = []
                 while i < len(evs):
                     t2, c2 = get_event_type_and_content(evs[i])
-                    if t2 not in ("m.call.candidates", "m.call.candidate") or c2.get("call_id") != call_id:
+                    if (
+                        t2 not in ("m.call.candidates", "m.call.candidate")
+                        or c2.get("call_id") != call_id
+                    ):
                         break
                     pre.extend(trickle_ice_tuples_from_m_call_event(t2, c2))
                     i += 1
-                await self._call(
-                    client, room_id, call_id, ver, offer, peer_party, pre
-                )
+                await self._call(client, room_id, call_id, ver, offer, peer_party, pre)
 
     async def _call(
         self,
@@ -296,9 +311,9 @@ class ReverseBridge:
         bot_party = make_party_id()
         mb = self.mb
         if not uri or not mb:
-            from nio import RoomSendError
             await client.room_send(
-                room_id, "m.room.message",
+                room_id,
+                "m.room.message",
                 {"msgtype": "m.text", "body": "Send a sip:user@host line first."},
             )
             p = MatrixPayloadCreator.create_hangup_payload(
@@ -320,7 +335,9 @@ class ReverseBridge:
         mb.detach_pyvoip()
 
         try:
-            answer = mb.create_answer_from_remote_offer(offer_sdp, remote_ice_candidates=pre_ice or None)
+            answer = mb.create_answer_from_remote_offer(
+                offer_sdp, remote_ice_candidates=pre_ice or None
+            )
             loc = mb.get_local_ice_candidates()
             host, port = mb.get_sip_rtp_bind_addr()
             print(
@@ -336,10 +353,16 @@ class ReverseBridge:
             print("[reverse] pyVoIP call answered — audio bridge running", flush=True)
 
             await finish_matrix_webrtc_setup(
-                self.bot, client, mb,
-                room_id=room_id, call_id=call_id, version=version,
-                bot_party=bot_party, element_party_id=element_party,
-                answer_sdp=answer, local_ice_candidates=loc,
+                self.bot,
+                client,
+                mb,
+                room_id=room_id,
+                call_id=call_id,
+                version=version,
+                bot_party=bot_party,
+                element_party_id=element_party,
+                answer_sdp=answer,
+                local_ice_candidates=loc,
             )
             print(
                 f"[reverse] Matrix signalling done for call_id={call_id} "
@@ -357,7 +380,6 @@ class ReverseBridge:
             hangup_call(self._pyvoip_call)
             self._pyvoip_call = None
             mb.detach_pyvoip()
-            from nio import RoomSendError
             p = MatrixPayloadCreator.create_hangup_payload(
                 call_id, version, bot_party, "ice_failed"
             )["content"]

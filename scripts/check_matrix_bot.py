@@ -5,6 +5,7 @@ Run from project root: poetry run python scripts/check_matrix_bot.py
 Prints which env vars are set (without values).
 """
 
+import asyncio
 import os
 import sys
 
@@ -14,10 +15,16 @@ os.chdir(_root)
 
 try:
     from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None  # type: ignore[assignment,misc]
+
+if load_dotenv is not None:
     loaded = load_dotenv(os.path.join(_root, "bot", ".env"))
     print("bot/.env:", "loaded" if loaded else "not found")
-except ImportError:
+else:
     print("python-dotenv not installed, using system env")
+
+from bot.MatrixBot import MatrixBot
 
 REQUIRED = ("MATRIX_BOT_USERNAME", "MATRIX_BOT_PASSWORD", "MATRIX_BOT_HOMESERVER")
 for name in REQUIRED:
@@ -31,11 +38,11 @@ if missing:
 
 print("Creating MatrixBot and logging in...")
 try:
-    from bot.MatrixBot import MatrixBot
     bot = MatrixBot()
 except Exception as e:
     print("MatrixBot() failed:", e)
     sys.exit(1)
+
 
 async def try_connect():
     try:
@@ -48,7 +55,7 @@ async def try_connect():
         print("connect_to_server() failed:", type(e).__name__, e)
         return False
 
-import asyncio
+
 if asyncio.run(try_connect()):
     print("Bot ready.")
 else:

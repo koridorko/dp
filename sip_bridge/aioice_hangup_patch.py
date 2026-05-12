@@ -12,11 +12,14 @@ use of MediaBridge stays free of global aioice monkey-patching.
 
 from __future__ import annotations
 
+try:
+    import aioice.stun as _stun
+except ImportError:
+    _stun = None
+
 
 def install_aioice_stun_hangup_patch() -> None:
-    try:
-        import aioice.stun as _stun
-    except ImportError:
+    if _stun is None:
         return
     if getattr(_stun.Transaction, "_dp_hangup_patch_installed", False):
         return

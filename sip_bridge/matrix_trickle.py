@@ -7,8 +7,9 @@ import os
 import sys
 import time
 
-from Matrix import MatrixPayloadCreator
 from bot.MatrixBot import MatrixBot
+from Matrix import MatrixPayloadCreator
+from nio import RoomSendError
 
 from .config import WAIT_CANDIDATES_AFTER_ANSWER_SEC
 from .matrix_sync import nio_sync, parse_sync_for_candidates_by_party
@@ -28,8 +29,6 @@ async def finish_matrix_webrtc_setup(
     local_ice_candidates: list[dict],
 ) -> None:
     """Send m.call.answer, trickle locals, poll remote candidates into MediaBridge, m.call.select_answer."""
-    from nio import RoomSendError
-
     content = {
         "call_id": call_id,
         "version": str(version),
@@ -53,7 +52,10 @@ async def finish_matrix_webrtc_setup(
         )["content"]
         try:
             await bot.send_call_candidates(room_id, payload)
-            print(f"[Matrix] sent {len(local_ice_candidates)} local ICE candidate(s)", flush=True)
+            print(
+                f"[Matrix] sent {len(local_ice_candidates)} local ICE candidate(s)",
+                flush=True,
+            )
         except Exception as e:
             print(f"[matrix_trickle] send_call_candidates: {e}", file=sys.stderr)
 

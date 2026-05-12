@@ -8,7 +8,7 @@ import sys
 import time
 
 from bot.MatrixBot import MatrixBot
-
+from nio import JoinError
 from sip_bridge.matrix_sync import nio_sync
 
 
@@ -35,7 +35,6 @@ async def wait_for_paired_room(bot: MatrixBot, peer_user_id: str) -> str:
     """
     client = bot.client
     last_log = 0.0
-    from nio import JoinError
 
     while True:
         sync = await nio_sync(client)

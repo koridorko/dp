@@ -378,7 +378,6 @@ class MediaBridge:
                 self._ulaw_resampler = resampler
             except Exception:
                 pass
-        import struct
 
         frames_8k = []
         for i in range(0, n_8k, 160):
@@ -553,12 +552,8 @@ class MediaBridge:
 
     async def _create_offer(self) -> str:
         import av
-        from aiortc import (
-            RTCPeerConnection,
-            RTCConfiguration,
-            RTCIceServer,
-            MediaStreamTrack,
-        )
+        from aiortc import (MediaStreamTrack, RTCConfiguration, RTCIceServer,
+                            RTCPeerConnection)
 
         aq = self._sip_to_webrtc_queue
         pts_ref = self._webrtc_pts_ref
@@ -664,13 +659,8 @@ class MediaBridge:
         remote_ice_candidates: list[tuple[str, str | None, int | None]] | None = None,
     ) -> str:
         import av
-        from aiortc import (
-            RTCPeerConnection,
-            RTCConfiguration,
-            RTCIceServer,
-            RTCSessionDescription,
-            MediaStreamTrack,
-        )
+        from aiortc import (MediaStreamTrack, RTCConfiguration, RTCIceServer,
+                            RTCPeerConnection, RTCSessionDescription)
 
         aq = self._sip_to_webrtc_queue
         pts_ref = self._webrtc_pts_ref

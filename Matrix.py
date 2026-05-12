@@ -68,7 +68,10 @@ class MatrixPayloadCreator:
 
     @staticmethod
     def create_hangup_payload(
-        call_id: str, version: str | int = "1", party_id: str = "", reason: str = "user_hangup"
+        call_id: str,
+        version: str | int = "1",
+        party_id: str = "",
+        reason: str = "user_hangup",
     ) -> dict:
         """Create payload for m.call.hangup event."""
         content = {

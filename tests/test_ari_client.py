@@ -8,11 +8,8 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
-from sip_bridge.ari_client import (
-    _ari_url,
-    get_channel_variable,
-    resolve_caller_sip_identity,
-)
+from sip_bridge.ari_client import (_ari_url, get_channel_variable,
+                                   resolve_caller_sip_identity)
 
 
 def test_ari_url_prepends_ari_and_encodes_query():
@@ -91,7 +88,5 @@ def test_resolve_caller_sip_identity_bare_number_no_domain(mock_gcv):
     mock_gcv.side_effect = lambda b, u, p, cid, var: (
         None if "remote_uri" in var else "333" if "CALLERID" in var else None
     )
-    out = resolve_caller_sip_identity(
-        "http://127.0.0.1:8088", "u", "pw", "chan-1", ""
-    )
+    out = resolve_caller_sip_identity("http://127.0.0.1:8088", "u", "pw", "chan-1", "")
     assert out == "333"

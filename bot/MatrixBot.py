@@ -2,9 +2,14 @@
 
 import asyncio
 import os
-import sys
 
-from nio import AsyncClient, LoginResponse
+from nio import (
+    AsyncClient,
+    LoginResponse,
+    RoomCreateError,
+    RoomInviteError,
+    RoomSendError,
+)
 
 
 class MatrixBotException(Exception):
@@ -92,8 +97,6 @@ class MatrixBot:
 
     async def create_room_and_invite_user(self, matrix_user_id: str) -> str:
         """Create a room and invite the user. Returns room_id."""
-        from nio import RoomCreateError, RoomInviteError
-
         try:
             create_resp = await self.client.room_create(invite=[matrix_user_id])
         except TypeError:
@@ -111,8 +114,6 @@ class MatrixBot:
 
     async def send_call_invite(self, room_id: str, content: dict) -> None:
         """Send m.call.invite event to a room. content = event content dict."""
-        from nio import RoomSendError
-
         resp = await self.client.room_send(
             room_id=room_id,
             message_type="m.call.invite",
@@ -123,8 +124,6 @@ class MatrixBot:
 
     async def send_select_answer(self, room_id: str, content: dict) -> None:
         """Send m.call.select_answer to a room."""
-        from nio import RoomSendError
-
         resp = await self.client.room_send(
             room_id=room_id,
             message_type="m.call.select_answer",
@@ -135,8 +134,6 @@ class MatrixBot:
 
     async def send_hangup(self, room_id: str, content: dict) -> None:
         """Send m.call.hangup to a room."""
-        from nio import RoomSendError
-
         resp = await self.client.room_send(
             room_id=room_id,
             message_type="m.call.hangup",
@@ -147,8 +144,6 @@ class MatrixBot:
 
     async def send_call_candidates(self, room_id: str, content: dict) -> None:
         """Send m.call.candidates to a room. content must have call_id, version, candidates list."""
-        from nio import RoomSendError
-
         resp = await self.client.room_send(
             room_id=room_id,
             message_type="m.call.candidates",

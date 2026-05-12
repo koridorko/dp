@@ -5,3 +5,4 @@ test_script.py
 plan.txt
 /docs/*
 config/rtpengine.conf
+checkcode.sh

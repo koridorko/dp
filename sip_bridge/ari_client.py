@@ -5,13 +5,18 @@ and notify the bridge so it can send m.call.invite to Matrix.
 """
 
 import asyncio
+import base64
 import json
 import logging
-import os
 import urllib.error
 import urllib.parse
 import urllib.request
-import re
+from typing import Callable
+
+try:
+    import websockets
+except ImportError:
+    websockets = None  # type: ignore[misc, assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +47,6 @@ def ari_http(
     req.add_header("Content-Type", "application/json")
     cred = urllib.parse.quote(user, safe=""), urllib.parse.quote(password, safe="")
     # Basic auth
-    import base64
     req.add_header(
         "Authorization",
         "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode(),
@@ -114,12 +118,18 @@ def create_external_media_channel(
         "external_host": host_port,
         "format": format_codec,
     }
-    return ari_http(base, "POST", "/channels/externalMedia", user, password, query=query)
+    return ari_http(
+        base, "POST", "/channels/externalMedia", user, password, query=query
+    )
 
 
-def create_bridge(base: str, user: str, password: str, bridge_type: str = "mixing") -> dict | None:
+def create_bridge(
+    base: str, user: str, password: str, bridge_type: str = "mixing"
+) -> dict | None:
     """POST /ari/bridges. Returns bridge dict or None."""
-    return ari_http(base, "POST", "/bridges", user, password, body={"type": bridge_type})
+    return ari_http(
+        base, "POST", "/bridges", user, password, body={"type": bridge_type}
+    )
 
 
 def add_channel_to_bridge(
@@ -146,7 +156,6 @@ def delete_channel(base: str, user: str, password: str, channel_id: str) -> bool
     try:
         url = _ari_url(base, f"/channels/{channel_id}")
         req = urllib.request.Request(url, method="DELETE")
-        import base64
         req.add_header(
             "Authorization",
             "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode(),
@@ -204,7 +213,9 @@ def setup_external_media_for_sip_channel(
         return False
     bid = bridge["id"]
     if not add_channel_to_bridge(base, user, password, bid, sip_channel_id):
-        logger.warning("ARI: addChannel sip=%s to bridge=%s failed", sip_channel_id, bid)
+        logger.warning(
+            "ARI: addChannel sip=%s to bridge=%s failed", sip_channel_id, bid
+        )
         return False
     if not add_channel_to_bridge(base, user, password, bid, ext_id):
         logger.warning(
@@ -256,7 +267,7 @@ def resolve_caller_sip_identity(
     )
     if u:
         name, uri = u.split(" ")
-        return name.replace("\"", "").replace("\\", "").upper() + " " + uri
+        return name.replace('"', "").replace("\\", "").upper() + " " + uri
     num = get_channel_variable(base, user, password, channel_id, "CALLERID(num)")
     if not num:
         return ""
@@ -267,8 +278,6 @@ def resolve_caller_sip_identity(
 
 def channel_still_exists(base: str, user: str, password: str, channel_id: str) -> bool:
     """GET /ari/channels/{id}. False if 404 (channel hung up); True on 200 or on transient errors (avoid false hangup)."""
-    import base64
-
     if not base or not channel_id:
         return True
     url = _ari_url(base, f"/channels/{channel_id}")
@@ -297,7 +306,7 @@ async def run_ari_websocket(
     app_name: str,
     our_rtp_host: str,
     our_rtp_port: int,
-    on_incoming_call: "Callable[[str, str], None]",
+    on_incoming_call: Callable[[str, str], None],
     loop=None,
     format_codec: str = "ulaw",
     on_sip_channel_destroyed=None,
@@ -313,20 +322,16 @@ async def run_ari_websocket(
     on_sip_channel_destroyed: optional async callback(channel_id) when a channel is destroyed (SIP hangup).
     """
     loop = loop or asyncio.get_event_loop()
-    ws_url = base_http.replace("http://", "ws://").replace("https://", "wss://").rstrip("/")
+    ws_url = (
+        base_http.replace("http://", "ws://").replace("https://", "wss://").rstrip("/")
+    )
     # subscribeAll: after PJSIP + External Media join a native bridge, they leave Stasis and the
     # app has no channels — app-only subscription stops delivering ChannelDestroyed. We need
     # subscribeAll to see SIP hangup; still filter StasisStart by application name.
-    ws_url += (
-        f"/ari/events?app={urllib.parse.quote(app_name)}"
-        f"&subscribeAll=true"
-    )
-    import base64
+    ws_url += f"/ari/events?app={urllib.parse.quote(app_name)}" f"&subscribeAll=true"
     auth = base64.b64encode(f"{user}:{password}".encode()).decode()
 
-    try:
-        import websockets
-    except ImportError:
+    if websockets is None:
         logger.error("websockets not installed. pip install websockets")
         return
 
@@ -350,7 +355,9 @@ async def run_ari_websocket(
                             try:
                                 await on_sip_channel_destroyed(destroyed_id)
                             except Exception as e:
-                                logger.exception("on_sip_channel_destroyed failed: %s", e)
+                                logger.exception(
+                                    "on_sip_channel_destroyed failed: %s", e
+                                )
                         continue
                     if ev_type == "StasisStart":
                         if (ev.get("application") or "") != app_name:
@@ -363,8 +370,16 @@ async def run_ari_websocket(
                         # args[0] = extension (e.g. "111") from Stasis(matrix-bridge, 111)
                         extension = str(args[0]) if args else ""
                         # Only handle channels that look like SIP (PJSIP) - the incoming call
-                        if "PJSIP" in channel_name or "SIP" in channel_name or extension.isdigit():
-                            logger.info("StasisStart channel=%s extension=%s", channel_id, extension)
+                        if (
+                            "PJSIP" in channel_name
+                            or "SIP" in channel_name
+                            or extension.isdigit()
+                        ):
+                            logger.info(
+                                "StasisStart channel=%s extension=%s",
+                                channel_id,
+                                extension,
+                            )
                             # Answer the channel so we get media
                             ok_media = await loop.run_in_executor(
                                 None,
@@ -380,7 +395,10 @@ async def run_ari_websocket(
                                 ),
                             )
                             if not ok_media:
-                                logger.warning("External Media / bridge setup failed for %s", channel_id)
+                                logger.warning(
+                                    "External Media / bridge setup failed for %s",
+                                    channel_id,
+                                )
                                 continue
                             # Notify bridge: (sip_channel_id, extension)
                             try:
@@ -395,4 +413,3 @@ async def run_ari_websocket(
                 await asyncio.sleep(2)
 
     await _run()
-

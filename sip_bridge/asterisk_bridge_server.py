@@ -16,6 +16,8 @@ import logging
 import os
 import sys
 import time
+import traceback
+
 import yaml
 
 try:
@@ -26,19 +28,20 @@ try:
 except ImportError:
     pass
 
-from Matrix import MatrixPayloadCreator, make_party_id
 from bot.MatrixBot import MatrixBot
+from Matrix import MatrixPayloadCreator, make_party_id
+
 from . import matrix_sync
-from .config import (
-    ANSWER_TIMEOUT_SEC,
-    WAIT_JOIN_ROOM_SEC,
-    WAIT_CANDIDATES_AFTER_ANSWER_SEC,
-    DEFAULT_RTP_PORT,
-    MINIMAL_INVITE_SDP,
-    SYNC_POLL_MS,
+from .ari_client import (
+    channel_still_exists,
+    delete_channel,
+    resolve_caller_sip_identity,
+    run_ari_websocket,
 )
-from .sdp_utils import sdp_summary, inject_ice_candidates_into_sdp
-from .ari_client import resolve_caller_sip_identity
+from .config import (ANSWER_TIMEOUT_SEC, DEFAULT_RTP_PORT, MINIMAL_INVITE_SDP,
+                     WAIT_CANDIDATES_AFTER_ANSWER_SEC,
+                     WAIT_JOIN_ROOM_SEC)
+from .sdp_utils import inject_ice_candidates_into_sdp
 
 # MediaBridge: RTP (ulaw from Asterisk) <-> WebRTC (Opus to Element)
 try:
@@ -81,8 +84,6 @@ async def _watch_call_session(bridge: "AsteriskBridge", call_id: str) -> None:
       That is reliable even if the ARI WebSocket does not deliver ChannelDestroyed (e.g. after native bridge).
     - Poll Matrix sync for m.call.hangup from the remote user; then ARI-hangup the SIP channel.
     """
-    from .ari_client import channel_still_exists, delete_channel
-
     loop = asyncio.get_event_loop()
 
     while True:
@@ -224,9 +225,7 @@ async def handle_incoming_call(
         print(f"[Asterisk] Sending message to {matrix_user_id}")
         client = bot.client
         if caller_identity:
-            body = (
-                f"Incoming call from {caller_identity} at matrix bridge"
-            )
+            body = f"Incoming call from {caller_identity} at matrix bridge"
         else:
             body = f"Calling you from {extension} at matrix bridge"
         await client.room_send(
@@ -435,8 +434,6 @@ async def main() -> None:
     bridge.ari_user = ari_user
     bridge.ari_pass = ari_pass
 
-    from .ari_client import run_ari_websocket
-
     ari_task = asyncio.create_task(
         run_ari_websocket(
             ari_base,
@@ -479,8 +476,6 @@ def run() -> None:
         print("\n[Bridge] Stopped.")
     except Exception as e:
         print(f"[Bridge] Error: {e}", file=sys.stderr)
-        import traceback
-
         traceback.print_exc()
         sys.exit(1)
 
