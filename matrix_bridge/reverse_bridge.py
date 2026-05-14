@@ -6,7 +6,6 @@ Requires env MY_MATRIX_USERNAME (@you:server). The bot waits until it shares a 1
 with only that user (accepts invites), then listens for sip:… and native voice calls.
 
 WebRTC uses MediaBridge; SIP leg uses pyVoIP (VoIPPhone outbound INVITE, PCMU RTP).
-See docs/ARCHITECTURE.md and env REVERSE_PYVOIP_* below.
 """
 
 from __future__ import annotations
@@ -32,10 +31,13 @@ from MediaBridge import MediaBridge
 from nio import RoomSendError
 from sip_bridge.aioice_hangup_patch import install_aioice_stun_hangup_patch
 from sip_bridge.config import DEFAULT_RTP_PORT
-from sip_bridge.matrix_sync import (events_from_room,
-                                    get_event_type_and_content, nio_sync,
-                                    patch_nio_call_candidates_schema,
-                                    trickle_ice_tuples_from_m_call_event)
+from sip_bridge.matrix_sync import (
+    events_from_room,
+    get_event_type_and_content,
+    nio_sync,
+    patch_nio_call_candidates_schema,
+    trickle_ice_tuples_from_m_call_event,
+)
 from sip_bridge.matrix_trickle import finish_matrix_webrtc_setup
 
 from .pairing import load_bridge_user_id, wait_for_paired_room

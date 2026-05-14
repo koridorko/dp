@@ -3,13 +3,12 @@
 """
 Asterisk + Matrix bridge:
 - Asterisk receives SIP (Linphone), sends call to Stasis(matrix-bridge, EXTEN).
-- We create External Media channel (RTP to our port, ulaw), bridge with SIP channel.
+- We create External Media channel (RTP to our port), bridge with SIP channel.
 - We send m.call.invite to Matrix user (register.yaml: extension -> matrix_user_id).
-- Media: Asterisk (ulaw) <-> MediaBridge (ulaw<->48k PCM) <-> WebRTC (Opus) <-> Element.
+- Media: Asterisk  <-> MediaBridge (ulaw<->48k PCM) <-> WebRTC (Opus) <-> Element.
 
 Run: ./scripts/run_asterisk.sh
 Then: poetry run python -m sip_bridge
-Linphone: sip:111@127.0.0.1 (111 from register.yaml -> Matrix user)
 """
 
 import asyncio
@@ -39,9 +38,13 @@ from .ari_client import (
     resolve_caller_sip_identity,
     run_ari_websocket,
 )
-from .config import (ANSWER_TIMEOUT_SEC, DEFAULT_RTP_PORT, MINIMAL_INVITE_SDP,
-                     WAIT_CANDIDATES_AFTER_ANSWER_SEC,
-                     WAIT_JOIN_ROOM_SEC)
+from .config import (
+    ANSWER_TIMEOUT_SEC,
+    DEFAULT_RTP_PORT,
+    MINIMAL_INVITE_SDP,
+    WAIT_CANDIDATES_AFTER_ANSWER_SEC,
+    WAIT_JOIN_ROOM_SEC,
+)
 from .sdp_utils import inject_ice_candidates_into_sdp
 
 # MediaBridge: RTP (ulaw from Asterisk) <-> WebRTC (Opus to Element)
@@ -123,7 +126,7 @@ async def _watch_call_session(bridge: "AsteriskBridge", call_id: str) -> None:
         if not ok:
             continue
 
-        # Our hangup already sent (e.g. from SIP poll or ChannelDestroyed)
+        # Our hangup already sent (from SIP poll or ChannelDestroyed)
         if hid_party == our_party:
             async with bridge._sessions_lock:
                 bridge.sessions.pop(call_id, None)
@@ -206,8 +209,6 @@ async def handle_incoming_call(
             ):
                 break
             await asyncio.sleep(0.5)
-
-    # Create WebRTC offer and send m.call.invite
 
     # Notify room with caller SIP identity (From / PJSIP remote) before m.call.invite
     caller_identity = ""
